@@ -1,1 +1,127 @@
-# TransactionRecord
+# 记账本 · TransactionRecord
+
+离线优先的个人记账 PWA。一套代码同时是网站和「装到主屏幕」的应用，数据全部存在自己设备的浏览器里，不上传任何服务器。
+
+- 收支记录、分类管理、月份切换
+- 分类占比环形图、近 6 个月收支对比、本月小结
+- 完整离线可用（Service Worker 预缓存），断网照常记账
+- 一键导出 JSON 备份 / CSV 明细，可再导入恢复
+- 浅色 / 深色两套配色，跟随系统或手动切换
+- 默认马来西亚令吉（RM），可在设置里改
+
+技术栈：Vite + React + IndexedDB，无后端、无第三方图表库（图表是手写 SVG）。
+
+---
+
+## 本地开发
+
+```bash
+npm install
+npm run dev        # http://localhost:5173/TransactionRecord/
+npm run build      # 产物在 dist/
+npm run preview    # 本地预览生产构建
+```
+
+Node 20 以上。
+
+---
+
+## 部署到 GitHub Pages
+
+仓库里已经带好 `.github/workflows/deploy.yml`，推代码就会自动构建部署。第一次需要手动开一下 Pages：
+
+1. 仓库 **Settings → Pages**
+2. **Source** 选 **GitHub Actions**（不要选 "Deploy from a branch"）
+3. 回到 **Actions** 标签页，确认 workflow 跑成功（绿勾）
+4. 站点地址：`https://weihong0506.github.io/TransactionRecord/`
+
+> ⚠️ 免费账号的 **私有仓库无法使用 GitHub Pages**，仓库需要是 Public。代码公开不等于数据公开——记账数据只在你自己的手机里，仓库里只有程序代码。
+
+### 路径前缀：PWA 最常见的坑
+
+GitHub Pages 把站点放在子路径 `/TransactionRecord/` 下面。以下三处必须一致，否则加到主屏幕后会白屏、Service Worker 也注册不上：
+
+| 位置 | 值 |
+|---|---|
+| `vite.config.js` 的 `base` | `/TransactionRecord/` |
+| manifest 的 `start_url` | `/TransactionRecord/` |
+| manifest 的 `scope` | `/TransactionRecord/` |
+
+本项目把它们统一成 `vite.config.js` 顶部的一个 `BASE` 常量，改一处就够了。
+
+**如果改了仓库名**，同步改掉 `BASE` 即可。
+
+---
+
+## 改用 Cloudflare Pages / Vercel（可选）
+
+这两家支持私有仓库免费部署，站点在根路径，没有上面的子路径问题。
+
+1. 把 `vite.config.js` 里的 `BASE` 改成 `'/'`
+2. 在 Cloudflare Pages / Vercel 里连接这个 GitHub 仓库
+3. 构建命令 `npm run build`，输出目录 `dist`
+
+---
+
+## 装到手机
+
+PWA 必须走 HTTPS，`github.io` 自带 HTTPS，直接满足。
+
+- **iPhone**：Safari 打开站点 → 底部「分享」→「添加到主屏幕」
+  （必须用 Safari，Chrome for iOS 装不了）
+- **Android**：Chrome 菜单 →「安装应用」/「添加到主屏幕」
+
+装好之后全屏运行、有独立图标，断网也能打开。
+
+---
+
+## 数据与备份
+
+数据存在浏览器的 IndexedDB 里，**只在这一台设备上**，不会同步、不会上传。
+
+⚠️ iOS 对网页应用的本地存储保护比 Android 弱，长期不打开可能被系统清理。**请定期在「设置 → 导出备份」存一份 JSON 到「文件」或 iCloud 云盘**，换手机时用「导入备份」恢复。
+
+导出在 iOS 上会走系统分享面板（选「存储到文件」），在桌面浏览器上是直接下载。
+
+---
+
+## 目录结构
+
+```
+.github/workflows/deploy.yml   GitHub Pages 自动部署
+public/icons/                  PWA 图标（scripts/make-icons.py 生成）
+src/
+  App.jsx                      主界面、底部导航、月份切换
+  db.js                        IndexedDB 读写、备份导入导出
+  categories.js                默认分类与配色槽位
+  utils.js                     金额/日期格式化、汇总统计
+  styles.css                   设计令牌与全部样式
+  components/
+    TransactionSheet.jsx       记一笔 / 编辑弹层
+    TransactionList.jsx        按日分组的流水列表
+    Stats.jsx                  统计页
+    DonutChart.jsx             分类占比环形图（手写 SVG）
+    TrendChart.jsx             近 6 个月收支柱状图（手写 SVG）
+    CategoryManager.jsx        分类增删改
+    Settings.jsx               偏好、备份、清空数据
+scripts/
+  make-icons.py                重新生成各尺寸图标
+  smoke-test.mjs               生产构建冒烟测试（含离线验证）
+```
+
+### 配色说明
+
+图表配色取自一套经过色觉障碍（CVD）分离度校验的固定色序，分类的颜色跟着分类本身走，切换月份不会换色。同屏超过 7 个分类时，尾部自动合并为「其他分类」，避免颜色被迫循环使用。图例同时给出图标、名称、金额，并可展开数据表，所以识别从不只依赖颜色。
+
+---
+
+## 冒烟测试
+
+```bash
+npm run build
+npx vite preview --port 4173 &
+npm i -D playwright && npx playwright install chromium
+node scripts/smoke-test.mjs
+```
+
+会走一遍记账流程、截图各个页面，并验证断网后仍能打开。
