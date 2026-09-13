@@ -4,8 +4,10 @@ import Sheet from './Sheet.jsx'
 
 export default function TransactionSheet({
   categories,
+  accounts,
   currency,
   initial,
+  defaultAccountId,
   onSave,
   onDelete,
   onClose,
@@ -14,6 +16,9 @@ export default function TransactionSheet({
   const [type, setType] = useState(initial?.type ?? 'expense')
   const [amount, setAmount] = useState(initial ? String(initial.amount) : '')
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '')
+  const [accountId, setAccountId] = useState(
+    initial?.accountId ?? defaultAccountId ?? accounts[0]?.id ?? ''
+  )
   const [date, setDate] = useState(initial?.date ?? todayStr())
   const [note, setNote] = useState(initial?.note ?? '')
 
@@ -29,7 +34,7 @@ export default function TransactionSheet({
   }, [options, categoryId])
 
   const value = Number(amount)
-  const valid = amount !== '' && !Number.isNaN(value) && value > 0 && categoryId
+  const valid = amount !== '' && !Number.isNaN(value) && value > 0 && categoryId && accountId
 
   function submit(e) {
     e.preventDefault()
@@ -39,6 +44,7 @@ export default function TransactionSheet({
       type,
       amount: value,
       categoryId,
+      accountId,
       date,
       note: note.trim(),
     })
@@ -102,6 +108,26 @@ export default function TransactionSheet({
             ))}
           </div>
         </div>
+
+        {accounts.length > 1 && (
+          <div className="field">
+            <span className="field-label">账户</span>
+            <div className="acct-picker">
+              {accounts.map((a) => (
+                <button
+                  type="button"
+                  key={a.id}
+                  className="acct-chip"
+                  aria-pressed={accountId === a.id}
+                  onClick={() => setAccountId(a.id)}
+                >
+                  <span className="e">{a.icon}</span>
+                  {a.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="field">
           <label htmlFor="date">日期</label>

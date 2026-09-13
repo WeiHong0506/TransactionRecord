@@ -1,54 +1,64 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  deleteAccount,
   deleteCategory,
   deleteTransaction,
+  getAccounts,
   getAllTransactions,
   getCategories,
   getSetting,
+  initAccounts,
   initCategories,
+  saveAccount,
   saveCategory,
   saveTransaction,
   setSetting,
 } from './db.js'
 import { currentMonth, formatAmount, monthLabel, shiftMonth, symbolOf, sumBy } from './utils.js'
-import TransactionList from './components/TransactionList.jsx'
 import TransactionSheet from './components/TransactionSheet.jsx'
 import CategoryManager from './components/CategoryManager.jsx'
 import Stats from './components/Stats.jsx'
 import Settings from './components/Settings.jsx'
+import AccountsPage from './components/AccountsPage.jsx'
 import { useSync } from './useSync.js'
 
 export default function App() {
   const [ready, setReady] = useState(false)
-  const [tab, setTab] = useState('list')
+  // stats | accounts | settings（settings 不在底部导航里，从账号页右上角进）
+  const [tab, setTab] = useState('stats')
   const [month, setMonth] = useState(currentMonth())
   const [records, setRecords] = useState([])
   const [categories, setCategories] = useState([])
+  const [accounts, setAccounts] = useState([])
   const [currency, setCurrency] = useState('MYR')
   const [theme, setTheme] = useState('system')
-  const [editing, setEditing] = useState(null) // null | {} | record
+  const [editing, setEditing] = useState(null)
   const [showCategories, setShowCategories] = useState(false)
   const [toastMsg, setToastMsg] = useState(null)
   const [lastBackup, setLastBackup] = useState(null)
+  const [lastAccountId, setLastAccountId] = useState(null)
 
   const reload = useCallback(async () => {
-    const [rs, cs] = await Promise.all([getAllTransactions(), getCategories()])
+    const [rs, cs, as] = await Promise.all([getAllTransactions(), getCategories(), getAccounts()])
     setRecords(rs)
     setCategories(cs)
+    setAccounts(as)
   }, [])
 
-  // 云端同步：未配置 Supabase 参数时整套逻辑静默关闭
   const sync = useSync(reload)
 
   useEffect(() => {
     ;(async () => {
       await initCategories()
-      const [cur, th] = await Promise.all([
+      await initAccounts()
+      const [cur, th, lastAcc] = await Promise.all([
         getSetting('currency', 'MYR'),
         getSetting('theme', 'system'),
+        getSetting('lastAccountId', null),
       ])
       setCurrency(cur)
       setTheme(th)
+      setLastAccountId(lastAcc)
       setLastBackup(localStorage.getItem('lastBackup'))
       await reload()
       setReady(true)
@@ -66,20 +76,20 @@ export default function App() {
     setTimeout(() => setToastMsg(null), 2400)
   }, [])
 
-  const monthRecords = useMemo(
-    () => records.filter((t) => t.month === month),
-    [records, month]
-  )
+  const monthRecords = useMemo(() => records.filter((t) => t.month === month), [records, month])
   const expense = sumBy(monthRecords, 'expense')
   const income = sumBy(monthRecords, 'income')
   const balance = income - expense
-
   const isCurrentMonth = month === currentMonth()
 
   async function handleSave(record) {
     await saveTransaction(record)
     setEditing(null)
     setMonth(record.date.slice(0, 7))
+    if (record.accountId) {
+      setLastAccountId(record.accountId)
+      await setSetting('lastAccountId', record.accountId)
+    }
     await reload()
     toast(record.id ? '已保存' : '已记一笔')
     sync.scheduleSync()
@@ -106,79 +116,105 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="month-switch">
-          <button onClick={() => setMonth(shiftMonth(month, -1))} aria-label="上个月">
-            ‹
-          </button>
-          <span className="label">{monthLabel(month)}</span>
-          <button
-            onClick={() => setMonth(shiftMonth(month, 1))}
-            disabled={isCurrentMonth}
-            aria-label="下个月"
-          >
-            ›
-          </button>
-        </div>
-        {!isCurrentMonth && (
-          <button className="icon-btn" onClick={() => setMonth(currentMonth())} aria-label="回到本月">
-            ⟲
-          </button>
-        )}
-      </header>
-
-      <section className="summary">
-        <div className="label">{monthLabel(month)}结余</div>
-        <div className="hero">
-          <span className="sym">{symbolOf(currency)}</span>
-          {balance < 0 && '-'}
-          {formatAmount(balance)}
-        </div>
-        <div className="split">
-          <div className="stat">
-            <div className="k">
-              <i className="dot expense" />
-              支出
+      {tab === 'stats' && (
+        <>
+          <header className="topbar">
+            <div className="month-switch">
+              <button onClick={() => setMonth(shiftMonth(month, -1))} aria-label="上个月">
+                ‹
+              </button>
+              <span className="label">{monthLabel(month)}</span>
+              <button
+                onClick={() => setMonth(shiftMonth(month, 1))}
+                disabled={isCurrentMonth}
+                aria-label="下个月"
+              >
+                ›
+              </button>
             </div>
-            <div className="v">{formatAmount(expense)}</div>
-          </div>
-          <div className="stat">
-            <div className="k">
-              <i className="dot income" />
-              收入
-            </div>
-            <div className="v">{formatAmount(income)}</div>
-          </div>
-        </div>
-      </section>
+            {!isCurrentMonth && (
+              <button className="icon-btn" onClick={() => setMonth(currentMonth())} aria-label="回到本月">
+                ⟲
+              </button>
+            )}
+          </header>
 
-      <main>
-        {tab === 'list' && (
-          <div className="section">
-            <div className="section-head">
-              <h2>收支明细</h2>
-              <span className="hint">{monthRecords.length} 笔</span>
+          <section className="summary">
+            <div className="label">{monthLabel(month)}结余</div>
+            <div className="hero">
+              <span className="sym">{symbolOf(currency)}</span>
+              {balance < 0 && '-'}
+              {formatAmount(balance)}
             </div>
-            <TransactionList
-              records={monthRecords}
-              categories={categories}
-              onEdit={(t) => setEditing(t)}
-            />
-          </div>
-        )}
+            <div className="split">
+              <div className="stat">
+                <div className="k">
+                  <i className="dot expense" />
+                  支出
+                </div>
+                <div className="v">{formatAmount(expense)}</div>
+              </div>
+              <div className="stat">
+                <div className="k">
+                  <i className="dot income" />
+                  收入
+                </div>
+                <div className="v">{formatAmount(income)}</div>
+              </div>
+            </div>
+          </section>
 
-        {tab === 'stats' && (
           <Stats
             month={month}
             monthRecords={monthRecords}
             allRecords={records}
             categories={categories}
+            accounts={accounts}
             currency={currency}
             onEdit={(t) => setEditing(t)}
           />
-        )}
+        </>
+      )}
 
-        {tab === 'settings' && (
+      {tab === 'accounts' && (
+        <>
+          <header className="topbar">
+            <h1 className="page-title">账号管理</h1>
+            <button className="icon-btn" onClick={() => setTab('settings')} aria-label="设置">
+              ⚙️
+            </button>
+          </header>
+          <AccountsPage
+            accounts={accounts}
+            records={records}
+            currency={currency}
+            onSave={async (a) => {
+              await saveAccount(a)
+              await reload()
+              sync.scheduleSync()
+              toast('已保存')
+            }}
+            onDelete={async (id) => {
+              await deleteAccount(id)
+              await reload()
+              sync.scheduleSync()
+              toast('账户已删除')
+            }}
+          />
+        </>
+      )}
+
+      {tab === 'settings' && (
+        <>
+          <header className="topbar">
+            <button className="icon-btn" onClick={() => setTab('accounts')} aria-label="返回">
+              ‹
+            </button>
+            <h1 className="page-title" style={{ flex: 1 }}>
+              设置
+            </h1>
+            <span style={{ width: 36 }} />
+          </header>
           <Settings
             currency={currency}
             onCurrencyChange={async (c) => {
@@ -201,18 +237,11 @@ export default function App() {
             categories={categories}
             sync={sync}
           />
-        )}
-      </main>
+        </>
+      )}
 
       <nav className="tabbar">
         <div className="tabbar-inner">
-          <button
-            className={`tab ${tab === 'list' ? 'active' : ''}`}
-            onClick={() => setTab('list')}
-          >
-            <span className="ico">📋</span>
-            明细
-          </button>
           <button
             className={`tab ${tab === 'stats' ? 'active' : ''}`}
             onClick={() => setTab('stats')}
@@ -224,24 +253,22 @@ export default function App() {
             ＋
           </button>
           <button
-            className={`tab ${tab === 'settings' ? 'active' : ''}`}
-            onClick={() => setTab('settings')}
+            className={`tab ${tab === 'accounts' || tab === 'settings' ? 'active' : ''}`}
+            onClick={() => setTab('accounts')}
           >
-            <span className="ico">⚙️</span>
-            设置
+            <span className="ico">👛</span>
+            账号
           </button>
-          <div className="tab" aria-hidden style={{ visibility: 'hidden' }}>
-            <span className="ico">·</span>
-            占位
-          </div>
         </div>
       </nav>
 
       {editing && (
         <TransactionSheet
           categories={categories}
+          accounts={accounts}
           currency={currency}
           initial={editing.id ? editing : null}
+          defaultAccountId={lastAccountId}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditing(null)}

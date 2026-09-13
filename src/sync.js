@@ -41,6 +41,7 @@ export function txToRemote(r, userId) {
     type: r.type,
     amount: r.amount,
     category_id: r.categoryId,
+    account_id: r.accountId ?? null,
     note: r.note ?? '',
     date: r.date,
     created_at: createdOf(r),
@@ -55,6 +56,7 @@ function txFromRemote(r) {
     type: r.type,
     amount: Number(r.amount),
     categoryId: r.category_id,
+    accountId: r.account_id ?? null,
     note: r.note ?? '',
     date: r.date,
     month: String(r.date).slice(0, 7),
@@ -93,9 +95,40 @@ function catFromRemote(r) {
   }
 }
 
+export function accToRemote(a, userId) {
+  return {
+    id: a.id,
+    user_id: userId,
+    name: a.name,
+    icon: a.icon,
+    slot: a.slot ?? 0,
+    initial_balance: a.initialBalance ?? 0,
+    order: a.order ?? 0,
+    created_at: createdOf(a),
+    updated_at: stampOf(a),
+    deleted_at: toIso(a.deletedAt),
+  }
+}
+
+function accFromRemote(r) {
+  return {
+    id: r.id,
+    name: r.name,
+    icon: r.icon,
+    slot: r.slot ?? 0,
+    initialBalance: Number(r.initial_balance ?? 0),
+    order: r.order ?? 0,
+    createdAt: toMs(r.created_at),
+    updatedAt: toMs(r.updated_at),
+    deletedAt: toMs(r.deleted_at),
+  }
+}
+
+// 顺序有意义：账户和分类先上传，流水引用它们
 const TABLES = [
-  { store: 'transactions', table: 'transactions', toRemote: txToRemote, fromRemote: txFromRemote },
+  { store: 'accounts', table: 'accounts', toRemote: accToRemote, fromRemote: accFromRemote },
   { store: 'categories', table: 'categories', toRemote: catToRemote, fromRemote: catFromRemote },
+  { store: 'transactions', table: 'transactions', toRemote: txToRemote, fromRemote: txFromRemote },
 ]
 
 /* ---------------- 推送 ---------------- */
@@ -177,8 +210,7 @@ export async function runSync(userId) {
     const boundUser = await getSetting('sync.userId', null)
     if (boundUser && boundUser !== userId) {
       await resetForNewAccount()
-      await setSetting('sync.cursor.transactions', null)
-      await setSetting('sync.cursor.categories', null)
+      for (const spec of TABLES) await setSetting(`sync.cursor.${spec.store}`, null)
     }
     await setSetting('sync.userId', userId)
 

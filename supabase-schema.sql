@@ -20,6 +20,24 @@ create table if not exists public.transactions (
   deleted_at  timestamptz
 );
 
+-- ---------- 资金账户 ----------
+create table if not exists public.accounts (
+  id              text        primary key,
+  user_id         uuid        not null references auth.users (id) on delete cascade,
+  name            text        not null,
+  icon            text        not null default '💵',
+  slot            smallint    not null default 0,
+  initial_balance numeric(14, 2) not null default 0,
+  "order"         integer     not null default 0,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  deleted_at      timestamptz
+);
+
+-- 已经建过 transactions 表的，补上账户归属列（可重复执行）
+alter table public.transactions
+  add column if not exists account_id text;
+
 -- ---------- 分类 ----------
 create table if not exists public.categories (
   id         text        primary key,
@@ -40,6 +58,8 @@ create index if not exists transactions_user_updated_idx
   on public.transactions (user_id, updated_at);
 create index if not exists categories_user_updated_idx
   on public.categories (user_id, updated_at);
+create index if not exists accounts_user_updated_idx
+  on public.accounts (user_id, updated_at);
 
 -- ============================================================
 -- 行级安全策略（RLS）
@@ -51,10 +71,12 @@ create index if not exists categories_user_updated_idx
 
 alter table public.transactions enable row level security;
 alter table public.categories   enable row level security;
+alter table public.accounts     enable row level security;
 
 -- 重复执行时先清掉旧策略，避免报重名错
 drop policy if exists "own transactions" on public.transactions;
 drop policy if exists "own categories"   on public.categories;
+drop policy if exists "own accounts"     on public.accounts;
 
 create policy "own transactions" on public.transactions
   for all
@@ -66,9 +88,14 @@ create policy "own categories" on public.categories
   using      (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+create policy "own accounts" on public.accounts
+  for all
+  using      (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
 -- ============================================================
 -- 验证：下面这句应该两行都返回 true
 -- ============================================================
 select relname as table_name, relrowsecurity as rls_enabled
 from pg_class
-where relname in ('transactions', 'categories');
+where relname in ('transactions', 'categories', 'accounts');

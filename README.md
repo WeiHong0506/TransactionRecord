@@ -3,6 +3,7 @@
 离线优先的个人记账 PWA。一套代码同时是网站和「装到主屏幕」的应用，数据全部存在自己设备的浏览器里，不上传任何服务器。
 
 - 收支记录、分类管理、月份切换
+- **资金账户**：现金 / 银行卡 / 电子钱包分开记，各自余额与总资产一目了然
 - 统计分两个视图：**分类构成**（占比环形图、近 6 个月收支对比、本月小结）和**日历**（每天的收支一目了然，点某天展开当日明细并可直接编辑）
 - 完整离线可用（Service Worker 预缓存），断网照常记账
 - 一键导出 JSON 备份 / CSV 明细，可再导入恢复
@@ -127,7 +128,7 @@ PWA 必须走 HTTPS，`github.io` 自带 HTTPS，直接满足。
 .github/workflows/deploy.yml   GitHub Pages 自动部署
 public/icons/                  PWA 图标（scripts/make-icons.py 生成）
 .env                           Supabase 连接参数（可公开，安全性靠 RLS）
-supabase-schema.sql            云端建表 + 行级安全策略
+supabase-schema.sql            云端建表 + 行级安全策略（含 accounts 表，可重复执行）
 src/
   App.jsx                      主界面、底部导航、月份切换
   db.js                        IndexedDB 读写、软删除墓碑、备份导入导出
@@ -141,6 +142,7 @@ src/
     TransactionSheet.jsx       记一笔 / 编辑弹层
     TransactionList.jsx        按日分组的流水列表
     Stats.jsx                  统计页
+    AccountsPage.jsx           账号管理：总资产、各账户余额、增删改账户
     CalendarView.jsx           日历视图：每日收支 + 当日明细
     DonutChart.jsx             分类占比环形图（手写 SVG）
     TrendChart.jsx             近 6 个月收支柱状图（手写 SVG）

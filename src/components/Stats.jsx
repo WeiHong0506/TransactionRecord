@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import DonutChart from './DonutChart.jsx'
 import TrendChart from './TrendChart.jsx'
 import CalendarView from './CalendarView.jsx'
+import TransactionList from './TransactionList.jsx'
 import {
   formatAmount,
   formatMoney,
@@ -16,10 +17,11 @@ export default function Stats({
   monthRecords,
   allRecords,
   categories,
+  accounts,
   currency,
   onEdit,
 }) {
-  const [view, setView] = useState('breakdown') // breakdown | calendar
+  const [view, setView] = useState('list') // list | calendar | breakdown
   const [type, setType] = useState('expense')
 
   const rows = useMemo(
@@ -40,6 +42,26 @@ export default function Stats({
   const expenseTotal = sumBy(monthRecords, 'expense')
   const avg = dayCount ? expenseTotal / dayCount : 0
 
+  if (view === 'list') {
+    return (
+      <div>
+        <ViewTabs view={view} setView={setView} />
+        <div className="section">
+          <div className="section-head">
+            <h2>收支明细</h2>
+            <span className="hint">{monthRecords.length} 笔</span>
+          </div>
+          <TransactionList
+            records={monthRecords}
+            categories={categories}
+            accounts={accounts}
+            onEdit={onEdit}
+          />
+        </div>
+      </div>
+    )
+  }
+
   if (view === 'calendar') {
     return (
       <div>
@@ -48,6 +70,7 @@ export default function Stats({
           month={month}
           records={monthRecords}
           categories={categories}
+          accounts={accounts}
           currency={currency}
           onEdit={onEdit}
         />
@@ -155,11 +178,14 @@ export default function Stats({
 function ViewTabs({ view, setView }) {
   return (
     <div className="seg view-tabs" role="group" aria-label="统计视图">
-      <button aria-pressed={view === 'breakdown'} onClick={() => setView('breakdown')}>
-        分类构成
+      <button aria-pressed={view === 'list'} onClick={() => setView('list')}>
+        明细
       </button>
       <button aria-pressed={view === 'calendar'} onClick={() => setView('calendar')}>
         日历
+      </button>
+      <button aria-pressed={view === 'breakdown'} onClick={() => setView('breakdown')}>
+        分类构成
       </button>
     </div>
   )

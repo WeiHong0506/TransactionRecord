@@ -13,7 +13,7 @@ function compact(v) {
   return v.toFixed(1).replace(/\.0$/, '')
 }
 
-export default function CalendarView({ month, records, categories, currency, onEdit }) {
+export default function CalendarView({ month, records, categories, accounts, currency, onEdit }) {
   const [selected, setSelected] = useState(null)
 
   const { cells, byDate } = useMemo(() => {
@@ -112,6 +112,7 @@ export default function CalendarView({ month, records, categories, currency, onE
             <TransactionList
               records={selectedRecords}
               categories={categories}
+              accounts={accounts}
               onEdit={onEdit}
               showDate={false}
             />

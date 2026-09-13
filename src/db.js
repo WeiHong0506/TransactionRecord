@@ -1,10 +1,11 @@
 import { openDB } from 'idb'
-import { DEFAULT_CATEGORIES } from './categories.js'
+import { DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES } from './categories.js'
 
 const DB_NAME = 'transaction-record'
 // v2：为云端同步增加软删除墓碑（deletedAt）和待上传标记（dirty）
 // v3：补齐 createdAt——v2 漏了它，导致上传时发送 null，撞上云端的非空约束
-const DB_VERSION = 3
+// v4：引入资金账户，历史流水回填到默认账户
+const DB_VERSION = 4
 
 let dbPromise = null
 
@@ -37,6 +38,34 @@ function getDB() {
               })
               cursor = await cursor.continue()
             }
+          }
+        }
+        if (oldVersion < 4) {
+          // 资金账户。历史流水没有归属，统一回填到默认账户，
+          // 否则它们会从「按账户统计」里凭空消失。
+          if (!db.objectStoreNames.contains('accounts')) {
+            db.createObjectStore('accounts', { keyPath: 'id' })
+          }
+          const now = Date.now()
+          const accounts = tx.objectStore('accounts')
+          for (const a of DEFAULT_ACCOUNTS) {
+            await accounts.put({
+              ...a,
+              createdAt: now,
+              updatedAt: now,
+              deletedAt: null,
+              dirty: 1,
+            })
+          }
+          const fallbackId = DEFAULT_ACCOUNTS[0].id
+          const store = tx.objectStore('transactions')
+          let cursor = await store.openCursor()
+          while (cursor) {
+            const v = cursor.value
+            if (!v.accountId) {
+              await cursor.update({ ...v, accountId: fallbackId, updatedAt: now, dirty: 1 })
+            }
+            cursor = await cursor.continue()
           }
         }
       },
@@ -97,6 +126,54 @@ export async function deleteCategory(id) {
   await db.put('categories', { ...row, deletedAt: Date.now(), updatedAt: Date.now(), dirty: 1 })
 }
 
+/* ---------------- 资金账户 ---------------- */
+
+// 账户为空时补上默认账户（例如换云端账号后云端没有账户数据的情况）
+export async function initAccounts() {
+  const db = await getDB()
+  const existing = await db.getAll('accounts')
+  if (existing.length > 0) return
+  const now = Date.now()
+  const tx = db.transaction('accounts', 'readwrite')
+  await Promise.all(
+    DEFAULT_ACCOUNTS.map((a) =>
+      tx.store.put({ ...a, createdAt: now, updatedAt: now, deletedAt: null, dirty: 1 })
+    )
+  )
+  await tx.done
+}
+
+export async function getAccounts() {
+  const db = await getDB()
+  const all = await db.getAll('accounts')
+  return all.filter(alive).sort((a, b) => a.order - b.order)
+}
+
+export async function saveAccount(account) {
+  const db = await getDB()
+  const now = Date.now()
+  const full = {
+    ...account,
+    id: account.id || newId(),
+    initialBalance: Math.round(Number(account.initialBalance || 0) * 100) / 100,
+    createdAt: account.createdAt ?? now,
+    updatedAt: now,
+    deletedAt: account.deletedAt ?? null,
+    dirty: 1,
+  }
+  await db.put('accounts', full)
+  return full
+}
+
+// 删除账户时，它名下的流水不会被删——读取时回退显示为「未指定账户」
+export async function deleteAccount(id) {
+  const db = await getDB()
+  const row = await db.get('accounts', id)
+  if (!row) return
+  const now = Date.now()
+  await db.put('accounts', { ...row, deletedAt: now, updatedAt: now, dirty: 1 })
+}
+
 /* ---------------- 流水 ---------------- */
 
 export async function saveTransaction(record) {
@@ -108,6 +185,7 @@ export async function saveTransaction(record) {
     month: record.date.slice(0, 7),
     amount: Math.round(Number(record.amount) * 100) / 100,
     note: record.note ?? '',
+    accountId: record.accountId ?? DEFAULT_ACCOUNTS[0].id,
     createdAt: record.createdAt ?? now,
     updatedAt: now,
     deletedAt: record.deletedAt ?? null,
@@ -196,7 +274,7 @@ export async function mergeRemote(storeName, remoteRows) {
 export async function purgeTombstones(maxAgeMs = 30 * 24 * 3600 * 1000) {
   const db = await getDB()
   const cutoff = Date.now() - maxAgeMs
-  for (const name of ['transactions', 'categories']) {
+  for (const name of ['transactions', 'categories', 'accounts']) {
     const tx = db.transaction(name, 'readwrite')
     const all = await tx.store.getAll()
     for (const r of all) {
@@ -210,9 +288,10 @@ export async function purgeTombstones(maxAgeMs = 30 * 24 * 3600 * 1000) {
 
 export async function exportAll() {
   const db = await getDB()
-  const [transactions, categories, settings] = await Promise.all([
+  const [transactions, categories, accounts, settings] = await Promise.all([
     db.getAll('transactions'),
     db.getAll('categories'),
+    db.getAll('accounts'),
     db.getAll('settings'),
   ])
   return {
@@ -221,6 +300,7 @@ export async function exportAll() {
     exportedAt: new Date().toISOString(),
     transactions: transactions.filter(alive),
     categories: categories.filter(alive),
+    accounts: accounts.filter(alive),
     settings: settings.filter((s) => !String(s.key).startsWith('sync.')),
   }
 }
@@ -231,12 +311,21 @@ export async function importAll(data, mode = 'merge') {
   }
   const db = await getDB()
   const now = Date.now()
-  const tx = db.transaction(['transactions', 'categories', 'settings'], 'readwrite')
+  const tx = db.transaction(['transactions', 'categories', 'accounts', 'settings'], 'readwrite')
   if (mode === 'replace') {
     await Promise.all([
       tx.objectStore('transactions').clear(),
       tx.objectStore('categories').clear(),
+      tx.objectStore('accounts').clear(),
     ])
+  }
+  for (const a of data.accounts || []) {
+    tx.objectStore('accounts').put({
+      ...a,
+      updatedAt: now,
+      deletedAt: a.deletedAt ?? null,
+      dirty: 1,
+    })
   }
   for (const c of data.categories || []) {
     tx.objectStore('categories').put({
@@ -250,6 +339,7 @@ export async function importAll(data, mode = 'merge') {
     tx.objectStore('transactions').put({
       ...t,
       month: t.month || t.date.slice(0, 7),
+      accountId: t.accountId ?? DEFAULT_ACCOUNTS[0].id,
       updatedAt: now,
       deletedAt: t.deletedAt ?? null,
       dirty: 1,
@@ -269,14 +359,19 @@ export async function importAll(data, mode = 'merge') {
 export async function clearAllData() {
   const db = await getDB()
   const now = Date.now()
-  const tx = db.transaction(['transactions', 'categories'], 'readwrite')
+  const tx = db.transaction(['transactions', 'categories', 'accounts'], 'readwrite')
 
-  for (const name of ['transactions', 'categories']) {
+  for (const name of ['transactions', 'categories', 'accounts']) {
     const store = tx.objectStore(name)
     const all = await store.getAll()
     for (const r of all) {
       if (!r.deletedAt) await store.put({ ...r, deletedAt: now, updatedAt: now, dirty: 1 })
     }
+  }
+
+  const accStore = tx.objectStore('accounts')
+  for (const a of DEFAULT_ACCOUNTS) {
+    await accStore.put({ ...a, createdAt: now + 1, updatedAt: now + 1, deletedAt: null, dirty: 1 })
   }
 
   // 默认分类用的是固定 id，用更新的时间戳写回去即可「复活」
@@ -297,10 +392,11 @@ export async function clearAllData() {
 // 切换账号时：清空本地并重新从云端拉全量
 export async function resetForNewAccount() {
   const db = await getDB()
-  const tx = db.transaction(['transactions', 'categories'], 'readwrite')
+  const tx = db.transaction(['transactions', 'categories', 'accounts'], 'readwrite')
   await Promise.all([
     tx.objectStore('transactions').clear(),
     tx.objectStore('categories').clear(),
+    tx.objectStore('accounts').clear(),
   ])
   await tx.done
 }

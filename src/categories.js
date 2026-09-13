@@ -22,6 +22,15 @@ export const DEFAULT_CATEGORIES = [
   { id: 'inc-other', name: '其他', icon: '✨', type: 'income', slot: 0, order: 15 },
 ]
 
+// 资金账户：现金、银行卡、电子钱包等。每笔流水都归属到一个账户。
+export const DEFAULT_ACCOUNTS = [
+  { id: 'acc-cash', name: '现金', icon: '💵', slot: 6, initialBalance: 0, order: 1 },
+]
+
+export const ACCOUNT_ICON_CHOICES = [
+  '💵', '💳', '🏦', '📱', '👛', '🪙', '💰', '🧧', '📈', '🏧',
+]
+
 export const CATEGORY_ICON_CHOICES = [
   '🍜', '☕', '🍎', '🚌', '⛽', '🚕', '🛍️', '👕', '🏠', '💡',
   '🧴', '🎮', '🎬', '✈️', '💊', '🏥', '📚', '✏️', '🎁', '🧧',
