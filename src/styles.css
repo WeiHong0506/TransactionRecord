@@ -567,6 +567,132 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* ============ 整页表单 ============ */
+/* 记一笔用整页，不用半屏弹层：分类宫格 + 账户 + 日期 + 备注在小屏上
+   本来就装不进半屏，弹层只会变成「一个滚动区域套着另一个滚动区域」。 */
+.page-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--plane);
+  animation: page-in 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes page-in {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-layer {
+    animation: none;
+  }
+}
+
+.page-form {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+/* 标题栏和保存键固定，只有中间字段区滚动——键盘弹出时保存键不会被顶走 */
+.page-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(env(safe-area-inset-top) + 8px) 10px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.page-bar .page-title {
+  flex: 1;
+  margin: 0;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.page-bar .link {
+  font-size: 13.5px;
+  color: var(--danger);
+  padding: 0 8px;
+}
+
+/* 占位块，让标题在只有返回键时也保持居中 */
+.bar-pad {
+  width: 36px;
+  flex: none;
+}
+
+.page-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 16px 20px;
+}
+
+.page-foot {
+  flex: none;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+}
+
+.page-foot .btn {
+  margin-top: 0;
+}
+
+/* 日期快捷键：大部分记账就是「今天」或「昨天」，省得开原生日期选择器 */
+.quick-dates {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.quick-dates button {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.quick-dates button[aria-pressed='true'] {
+  background: var(--dock-active);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* iOS Safari 会按内容给 input[type=date] 撑出一个固有宽度，
+   width:100% 压不住它，字段就会顶出屏幕。必须显式解掉 min-width
+   并关掉原生外观，再把高度补回来（关掉外观后 iOS 上会塌）。 */
+.date-input {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  font-family: inherit;
+}
+
+.date-input::-webkit-date-and-time-value {
+  text-align: left;
+  min-width: 0;
+  margin: 0;
+}
+
+.date-input::-webkit-calendar-picker-indicator {
+  margin-left: auto;
+  opacity: 0.55;
+}
+
 /* ============ 弹层 ============ */
 .sheet-backdrop {
   position: fixed;

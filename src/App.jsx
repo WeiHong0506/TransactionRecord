@@ -15,7 +15,7 @@ import {
   setSetting,
 } from './db.js'
 import { currentMonth, formatAmount, monthLabel, shiftMonth, symbolOf, sumBy } from './utils.js'
-import TransactionSheet from './components/TransactionSheet.jsx'
+import TransactionPage from './components/TransactionPage.jsx'
 import CategoryManager from './components/CategoryManager.jsx'
 import Stats from './components/Stats.jsx'
 import Settings from './components/Settings.jsx'
@@ -247,7 +247,7 @@ export default function App() {
       <TabBar tab={tab} setTab={setTab} onAdd={() => setEditing({})} />
 
       {editing && (
-        <TransactionSheet
+        <TransactionPage
           categories={categories}
           accounts={accounts}
           currency={currency}

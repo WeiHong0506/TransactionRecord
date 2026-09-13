@@ -29,8 +29,11 @@ export function formatMoney(value, currency) {
 
 /* ---------------- 日期 ---------------- */
 
-export function todayStr() {
-  return toDateStr(new Date())
+// offsetDays 为负就是往前推，用 setDate 让跨月跨年自动正确
+export function todayStr(offsetDays = 0) {
+  const d = new Date()
+  if (offsetDays) d.setDate(d.getDate() + offsetDays)
+  return toDateStr(d)
 }
 
 export function toDateStr(d) {

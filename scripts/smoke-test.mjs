@@ -181,14 +181,35 @@ await page.click('.icon-btn[aria-label="返回"]')
 await page.waitForSelector('.acct-row')
 console.log('✓ 设置页可从账号页进入并返回')
 
-// 记账弹层（现在带账户选择）
+// 记账整页表单（现在带账户选择）
 await page.click('.fab')
-await page.waitForSelector('.sheet')
+await page.waitForSelector('.page-form')
 await page.waitForTimeout(400)
 const hasAcctPicker = await page.locator('.acct-picker').count()
 console.log(hasAcctPicker ? '✓ 记账表单出现账户选择' : '✗ 记账表单缺少账户选择')
+// 日期字段不能顶出屏幕
+const dateFits = await page.evaluate(() => {
+  const el = document.querySelector('#date')
+  const box = el.parentElement.getBoundingClientRect()
+  const r = el.getBoundingClientRect()
+  return r.right <= box.right + 0.5 && r.width > 80 && document.documentElement.scrollWidth <= innerWidth
+})
+console.log(dateFits ? '✓ 日期字段没有超出屏幕' : '✗ 日期字段超出屏幕')
 await page.screenshot({ path: `${SHOTS}/04-add.png` })
-await page.keyboard.press('Escape')
+// 底栏不能透过整页表单露出来
+const dockHidden = await page.evaluate(() => {
+  const d = document.querySelector('.dock')
+  if (!d) return true
+  const r = d.getBoundingClientRect()
+  return document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2)?.closest('.dock') === null
+})
+console.log(dockHidden ? '✓ 整页表单盖住了底栏' : '✗ 底栏透出来了')
+// 安卓返回键 / 浏览器后退应当只关掉这一页，不退出应用
+await page.goBack()
+await page.waitForTimeout(300)
+const closedByBack =
+  (await page.locator('.page-form').count()) === 0 && (await page.locator('.dock').count()) === 1
+console.log(closedByBack ? '✓ 返回键关闭表单而不是退出应用' : '✗ 返回键行为不对')
 
 // 深色模式
 await page.emulateMedia({ colorScheme: 'dark' })
