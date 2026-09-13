@@ -75,6 +75,42 @@ PWA 必须走 HTTPS，`github.io` 自带 HTTPS，直接满足。
 
 ---
 
+## 云端同步（可选）
+
+不登录也能完整使用——同步是叠加在本地数据库之上的一层，不是替代。
+
+**设计：本地优先。** 记账永远先写进本机 IndexedDB，界面立刻更新，断网照常用。联网且已登录时，在后台双向同步：
+
+- 每条记录带 `updatedAt`，冲突时**后写优先**
+- 删除不是真删，而是写一个 `deletedAt` 墓碑，否则另一台设备永远不知道这条被删了
+- 本地改动打 `dirty` 标记，联网时推上去；拉取只取比上次同步更新的行
+- 同步时机：登录成功、记完一笔（防抖 2.5 秒）、回到前台、网络恢复
+
+### 启用步骤
+
+1. **建表**：Supabase 控制台 → SQL Editor，粘贴执行 `supabase-schema.sql`。
+   脚本最后会输出两行，确认 `rls_enabled` 都是 `true`。
+   > RLS 是整套方案的安全基石。publishable key 是公开的，没有 RLS 等于任何人都能读走所有人的账本。
+
+2. **开启 Google 登录**：Supabase → Authentication → Providers → Google，
+   填入从 Google Cloud Console 创建的 OAuth 客户端 ID / Secret。
+   Google 那边的「已授权的重定向 URI」填：
+   ```
+   https://<项目ref>.supabase.co/auth/v1/callback
+   ```
+
+3. **配置回跳地址**：Supabase → Authentication → URL Configuration
+   - Site URL：`https://weihong0506.github.io/TransactionRecord/`
+   - Redirect URLs 再加一条本地开发用的：`http://localhost:5173/TransactionRecord/`
+
+4. **填连接参数**：根目录 `.env` 里的 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`。
+   这两个值可以公开提交（安全性靠 RLS），CI 构建时会自动读取。
+   **绝对不要**把 `service_role` key 放进来。
+
+没配 `.env` 或参数为空时，同步功能整体静默关闭，界面上不会出现登录入口。
+
+---
+
 ## 数据与备份
 
 数据存在浏览器的 IndexedDB 里，**只在这一台设备上**，不会同步、不会上传。
@@ -90,9 +126,14 @@ PWA 必须走 HTTPS，`github.io` 自带 HTTPS，直接满足。
 ```
 .github/workflows/deploy.yml   GitHub Pages 自动部署
 public/icons/                  PWA 图标（scripts/make-icons.py 生成）
+.env                           Supabase 连接参数（可公开，安全性靠 RLS）
+supabase-schema.sql            云端建表 + 行级安全策略
 src/
   App.jsx                      主界面、底部导航、月份切换
-  db.js                        IndexedDB 读写、备份导入导出
+  db.js                        IndexedDB 读写、软删除墓碑、备份导入导出
+  supabase.js                  Supabase 客户端（未配置时整体降级为纯本地）
+  sync.js                      双向同步引擎：推送脏数据、增量拉取、冲突合并
+  useSync.js                   登录状态与同步调度
   categories.js                默认分类与配色槽位
   utils.js                     金额/日期格式化、汇总统计
   styles.css                   设计令牌与全部样式
@@ -104,9 +145,11 @@ src/
     TrendChart.jsx             近 6 个月收支柱状图（手写 SVG）
     CategoryManager.jsx        分类增删改
     Settings.jsx               偏好、备份、清空数据
+    SyncPanel.jsx              账号与同步状态
 scripts/
   make-icons.py                重新生成各尺寸图标
   smoke-test.mjs               生产构建冒烟测试（含离线验证）
+  sync-logic-test.mjs          同步逻辑单元测试（冲突合并、墓碑、脏标记）
 ```
 
 ### 配色说明
@@ -115,7 +158,17 @@ scripts/
 
 ---
 
-## 冒烟测试
+## 测试
+
+**同步逻辑单元测试**（不联网，几秒跑完）：
+
+```bash
+node scripts/sync-logic-test.mjs
+```
+
+覆盖冲突合并、软删除墓碑传播、上传中途又编辑、清空数据的传播语义。
+
+**端到端冒烟测试**（含离线验证）：
 
 ```bash
 npm run build

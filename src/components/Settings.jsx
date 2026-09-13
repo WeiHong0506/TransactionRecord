@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { CURRENCIES, csvEscape, downloadBlob } from '../utils.js'
 import { clearAllData, exportAll, importAll } from '../db.js'
+import SyncPanel from './SyncPanel.jsx'
 
 // iOS 的独立窗口模式里 <a download> 经常被吞掉，优先走系统分享面板
 async function deliverFile(content, filename, mime) {
@@ -28,6 +29,7 @@ export default function Settings({
   toast,
   records,
   categories,
+  sync,
 }) {
   const fileRef = useRef(null)
   const [busy, setBusy] = useState(false)
@@ -86,6 +88,7 @@ export default function Settings({
       const n = await importAll(data, 'merge')
       toast(`已导入 ${n} 笔记录`)
       onReload()
+      sync?.scheduleSync?.()
     } catch (err) {
       toast(err.message || '导入失败')
     } finally {
@@ -94,14 +97,20 @@ export default function Settings({
   }
 
   async function handleClear() {
-    if (!window.confirm('确定清空全部记账数据？此操作无法撤销，建议先导出备份。')) return
+    const extra = sync?.session
+      ? '\n\n你已登录云端同步，这次清空会同步到你所有已登录的设备。'
+      : ''
+    if (!window.confirm('确定清空全部记账数据？此操作无法撤销，建议先导出备份。' + extra)) return
     await clearAllData()
     toast('数据已清空')
     onReload()
+    sync?.scheduleSync?.()
   }
 
   return (
     <div>
+      <SyncPanel sync={sync} toast={toast} />
+
       <div className="section">
         <div className="section-head">
           <h2>偏好</h2>
@@ -187,9 +196,18 @@ export default function Settings({
           />
         </div>
         <p className="note-box" style={{ marginTop: 12 }}>
-          ⚠️ 数据保存在这台设备的浏览器里，不会上传到任何服务器。iOS
-          在长期不打开网页应用时可能清理本地数据，<strong>请定期导出备份</strong>，
-          存到「文件」或 iCloud 云盘。换手机时用导入功能恢复。
+          {sync?.session ? (
+            <>
+              ✅ 你已开启云端同步，数据在你的 Supabase 账户里有一份，换设备登录即可恢复。
+              导出备份仍然值得做——它不依赖任何服务，是最后一道保险。
+            </>
+          ) : (
+            <>
+              ⚠️ 数据保存在这台设备的浏览器里，不会上传到任何服务器。iOS
+              在长期不打开网页应用时可能清理本地数据，<strong>请定期导出备份</strong>，
+              存到「文件」或 iCloud 云盘。换手机时用导入功能恢复。
+            </>
+          )}
         </p>
       </div>
 

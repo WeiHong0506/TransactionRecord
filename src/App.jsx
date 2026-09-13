@@ -16,6 +16,7 @@ import TransactionSheet from './components/TransactionSheet.jsx'
 import CategoryManager from './components/CategoryManager.jsx'
 import Stats from './components/Stats.jsx'
 import Settings from './components/Settings.jsx'
+import { useSync } from './useSync.js'
 
 export default function App() {
   const [ready, setReady] = useState(false)
@@ -35,6 +36,9 @@ export default function App() {
     setRecords(rs)
     setCategories(cs)
   }, [])
+
+  // 云端同步：未配置 Supabase 参数时整套逻辑静默关闭
+  const sync = useSync(reload)
 
   useEffect(() => {
     ;(async () => {
@@ -78,6 +82,7 @@ export default function App() {
     setMonth(record.date.slice(0, 7))
     await reload()
     toast(record.id ? '已保存' : '已记一笔')
+    sync.scheduleSync()
   }
 
   async function handleDelete(id) {
@@ -85,6 +90,7 @@ export default function App() {
     setEditing(null)
     await reload()
     toast('已删除')
+    sync.scheduleSync()
   }
 
   if (!ready) {
@@ -192,6 +198,7 @@ export default function App() {
             toast={toast}
             records={records}
             categories={categories}
+            sync={sync}
           />
         )}
       </main>
@@ -246,10 +253,12 @@ export default function App() {
           onSave={async (c) => {
             await saveCategory(c)
             await reload()
+            sync.scheduleSync()
           }}
           onDelete={async (id) => {
             await deleteCategory(id)
             await reload()
+            sync.scheduleSync()
           }}
           onClose={() => setShowCategories(false)}
         />
