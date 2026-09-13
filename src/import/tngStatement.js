@@ -5,7 +5,9 @@ export { PdfPasswordError } from './pdfTable.js'
 /**
  * Touch 'n Go eWallet 对账单解析。
  *
- * 表头形如：Date | Status | Transaction Type | Description | Amount (RM) | Wallet Balance
+ * 真实账单的表头是：
+ *   Date | Status | Transaction Type | Reference | Description | Details | Amount (RM) | Wallet Balance
+ * 而且一份文件里通常有两张表：钱包流水，之后是 GO+ 理财流水（最后一列换成 GO+ Balance）。
  */
 
 const DATE_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
@@ -13,12 +15,12 @@ const DATE_SEARCH_RE = /(\d{1,2})\/(\d{1,2})\/(\d{4})/
 const AMOUNT_RE = /-?RM\s*([\d,]+\.?\d*)/i
 
 const headerMatch = (line) =>
-  /transaction\s*type/i.test(line) && /amount/i.test(line)
+  /transaction\s*type/i.test(line) && /amount/i.test(line) && /description/i.test(line)
 
 const isRecordStart = (cells) => DATE_RE.test((cells[0] ?? '').trim())
 
-// 折行续写的特征是日期列为空。页脚的「Total Debit: ...」通常顶格写，
-// 会落进日期列，据此把它挡在外面。
+// 折行续写的特征是日期列为空。每页页脚的「*This is a system generated email...」
+// 顶格写、会落进日期列，据此把它挡在外面。
 const isContinuation = (cells) => !(cells[0] ?? '').trim()
 
 // 马来西亚这边日期是 DD/MM/YYYY，不是美式的 MM/DD
@@ -29,6 +31,22 @@ function parseDate(s) {
   return `${y}-${String(Number(mo)).padStart(2, '0')}-${String(Number(d)).padStart(2, '0')}`
 }
 
+/**
+ * 清掉流水号。
+ *
+ * Reference / Details 两列全是十几二十位的交易流水号，对记账毫无意义。
+ * 我们本来就不读那两列，但列边界会漂——真实账单里已经出现过
+ * 类型列把 Reference 的一截吃进去（`DuitNow QR TNGD 20260816101`）。
+ * 所以在字段层面再清一道：凡是 8 位以上、含数字的连续串一律去掉。
+ * 商户名里几乎不会出现这种东西（「99 Speedmart」「7-Eleven」都很短）。
+ */
+function stripIds(s) {
+  return String(s ?? '')
+    .replace(/\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{8,}\b/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 function parseAmount(s) {
   const m = AMOUNT_RE.exec(String(s))
   if (!m) return null
@@ -37,34 +55,46 @@ function parseAmount(s) {
 }
 
 /**
- * 交易类型规则。
+ * 交易类型规则。匹配前会把类型名去掉所有空格并转小写——
+ * PDF 里长类型名经常被折行成 `DUITNOW_RECEI VEFROM`，带空格的原文匹配不上。
  *
  * 注意 DuitNow 有两副面孔：`DuitNow QR` 是扫码消费（要记），
  * `DUITNOW_RECEIVEFROM` 是别人转账给你（不记）。按 "duitnow" 一刀切
  * 会把钱包里占比最大的那部分支出悄悄丢掉。
  */
 const TYPE_RULES = [
-  { re: /duitnow[\s_-]*receive/i, action: 'exclude', why: '收到他人转账' },
-  { re: /duitnow[\s_-]*(qr|pay|send|transfer\s*to)/i, action: 'expense', why: '扫码消费' },
-  { re: /^reload|top[\s-]*up/i, action: 'exclude', why: '钱包充值，属于转账' },
-  { re: /transfer\s*to\s*wallet|fund\s*transfer/i, action: 'exclude', why: '钱包间转移' },
-  { re: /refund|reversal/i, action: 'income', why: '退款' },
-  { re: /cashback|reward/i, action: 'income', why: '返现' },
+  { re: /duitnow_?receive/, action: 'exclude', why: '收到他人转账' },
+  { re: /duitnow_?(qr|pay|send|transferto)/, action: 'expense', why: '扫码消费' },
+  { re: /^reload|topup/, action: 'exclude', why: '钱包充值，属于转账' },
+  { re: /transfertowallet|fundtransfer/, action: 'exclude', why: '钱包间转移' },
+  // GO+ 是钱包内置的理财，进出都只是钱在自己名下挪动，不是收支
+  { re: /ewalletcashout/, action: 'exclude', why: '转入 GO+，属于转账' },
+  { re: /go\+?cashin/, action: 'exclude', why: 'GO+ 转入，属于转账' },
+  {
+    re: /go\+?dailyearnings/,
+    action: 'income',
+    include: false,
+    why: 'GO+ 每日利息（金额极小，默认不导入）',
+  },
+  { re: /^payment$|^payment/, action: 'expense', why: '商户消费' },
+  { re: /refund|reversal/, action: 'income', why: '退款' },
+  { re: /cashback|reward/, action: 'income', why: '返现' },
 ]
 
 function classify(type) {
+  const norm = String(type).replace(/\s+/g, '').toLowerCase()
   for (const r of TYPE_RULES) {
-    if (r.re.test(type)) return r
+    if (r.re.test(norm)) return r
   }
   return { action: 'unknown', why: '未知类型，请确认' }
 }
 
 // 马来西亚常见商户 → 分类。命中靠的是描述里的商户名。
 const MERCHANT_RULES = [
-  ['exp-food', /mixue|mcdonald|kfc|starbucks|zus|tealive|chagee|foodpanda|grabfood|restoran|kopitiam|cafe|bakery|secret recipe|oldtown|texas chicken|subway|domino|pizza/i],
-  ['exp-transport', /grab(?!food)|rapid|mrt|lrt|ktm|shell|petronas|petron|caltex|bhp|parking|smart\s*tag|plus\s|touch.?n.?go|toll|myrapid|airasia|ets/i],
+  ['exp-food', /mixue|mcdonald|kfc|starbucks|zus|tealive|chagee|foodpanda|grabfood|restoran|restaurant|kopitiam|cafe|bakery|nasi|pizza|habib|huamui|secret recipe|oldtown|texas chicken|subway|domino|f&b|makan|corner/i],
+  ['exp-transport', /grab(?!food)|rapid|mrt|lrt|ktm|shell|petronas|petron|caltex|bhp|parking|smart\s*tag|toll|myrapid|airasia|ets/i],
   ['exp-shopping', /shopee|lazada|mydin|aeon|tesco|lotus|giant|econsave|uniqlo|padini|decathlon|ikea|nsk/i],
-  ['exp-daily', /7[\s-]*eleven|kk\s*super|familymart|99\s*speed|watson|guardian|caring|speedmart|mr\.?\s*diy/i],
+  ['exp-daily', /7[\s-]*eleven|kk\s*super|familymart|99\s*speed|speedmart|watson|guardian|caring|mr\.?\s*diy/i],
   ['exp-fun', /gsc|tgv|mbo|cinema|netflix|spotify|steam|playstation|karaoke|golf|gym/i],
   ['exp-health', /clinic|klinik|pharmacy|farmasi|hospital|dental|dentist|medical/i],
   ['exp-housing', /tnb|syabas|air\s*selangor|indah\s*water|unifi|maxis|celcom|digi|umobile|astro|time\s*fibre|yes\s*4g/i],
@@ -88,17 +118,16 @@ export function fingerprint(date, amount, note) {
   return `${date}|${Number(amount).toFixed(2)}|${String(note || '').trim().toLowerCase()}`
 }
 
-/**
- * 解析对账单。
- * @returns { rows, rawLines, columns, warnings }
- *   rows 每项：{ date, type(交易类型原文), description, amount, balance,
- *               action, why, direction, categoryId, include, dup }
- */
+const idxOf = (columns, re, fallback) => {
+  const i = columns.findIndex((c) => re.test(c))
+  return i >= 0 ? i : fallback
+}
+
 export async function parseTngStatement(
   file,
   { learnedRules, existingFingerprints, password } = {}
 ) {
-  const { columns, rows: raw, rawLines, ignored } = await extractTable(file, {
+  const { rows: raw, rawLines, ignored, orientation, columns } = await extractTable(file, {
     headerMatch,
     isRecordStart,
     isContinuation,
@@ -106,75 +135,86 @@ export async function parseTngStatement(
   })
 
   const warnings = []
-  for (const line of ignored ?? []) {
-    warnings.push(`忽略非记录行：${line.slice(0, 70)}`)
-  }
-  if (!columns) {
-    warnings.push('没能在 PDF 里找到表头，可能不是 TnG 对账单，或者是扫描件（图片版 PDF）。')
+  if (!columns || !raw?.length) {
+    warnings.push(
+      '没能在 PDF 里认出交易表格。可能不是 TnG 对账单，或者是扫描件（图片版 PDF，里面没有文字层）。'
+    )
     return { rows: [], rawLines, columns, warnings }
   }
-
-  // 按列名定位，不依赖固定下标——万一 TnG 调整了列顺序也不至于全错
-  const idxOf = (re, fallback) => {
-    const i = columns.findIndex((c) => re.test(c))
-    return i >= 0 ? i : fallback
+  if (orientation && orientation !== '正常') {
+    warnings.push(`页面是旋转的（${orientation}），已自动转正后解析。`)
   }
-  const iDate = idxOf(/date/i, 0)
-  const iType = idxOf(/transaction\s*type/i, 2)
-  const iDesc = idxOf(/description/i, 3)
-  const iAmount = idxOf(/amount/i, 4)
-  const iBalance = idxOf(/balance/i, 5)
 
-  const rows = []
-  let prevBalance = null
-
-  for (const cells of raw) {
-    const date = parseDate(cells[iDate] ?? '')
-    const amount = parseAmount(cells[iAmount] ?? '')
+  // ── 先把每行拆成结构化字段 ──
+  const parsed = []
+  for (const { cells, columns: cols } of raw) {
+    const date = parseDate(cells[idxOf(cols, /date/i, 0)] ?? '')
+    const amount = parseAmount(cells[idxOf(cols, /amount/i, 6)] ?? '')
     if (!date || amount == null) {
       warnings.push(`跳过无法解析的一行：${cells.join(' | ').slice(0, 80)}`)
       continue
     }
+    const balanceCol = idxOf(cols, /balance/i, -1)
+    parsed.push({
+      date,
+      amount,
+      type: stripIds(cells[idxOf(cols, /transaction\s*type/i, 2)]),
+      description: stripIds(cells[idxOf(cols, /description/i, 4)]),
+      balance: balanceCol >= 0 ? parseAmount(cells[balanceCol] ?? '') : null,
+      // 一份文件里有多张表，余额不能跨表比较，用列名把它们分开
+      ledger: balanceCol >= 0 ? cols[balanceCol] : 'default',
+    })
+  }
 
-    const type = (cells[iType] ?? '').trim()
-    const description = (cells[iDesc] ?? '').trim()
-    const balance = parseAmount(cells[iBalance] ?? '')
+  // ── 统一成时间正序 ──
+  // 余额差要按时间顺序比才有意义。对账单有的按正序有的按倒序，
+  // 这里先归一化，避免方向判断整体反过来。
+  if (parsed.length > 1 && parsed[0].date > parsed[parsed.length - 1].date) {
+    parsed.reverse()
+    warnings.push('账单是倒序排列的，已按时间正序重新排列。')
+  }
 
+  // ── 定方向、分类、去重 ──
+  const prevBalance = new Map()
+  const rows = []
+
+  for (const p of parsed) {
     // 方向优先看余额变化——比按类型名猜可靠得多
     let direction = null
-    if (balance != null && prevBalance != null) {
-      const delta = balance - prevBalance
-      if (Math.abs(Math.abs(delta) - amount) < 0.011) {
+    const prev = prevBalance.get(p.ledger)
+    if (p.balance != null && prev != null) {
+      const delta = p.balance - prev
+      if (Math.abs(Math.abs(delta) - p.amount) < 0.011) {
         direction = delta < 0 ? 'expense' : 'income'
       }
     }
-    if (balance != null) prevBalance = balance
+    if (p.balance != null) prevBalance.set(p.ledger, p.balance)
 
-    const rule = classify(type)
+    const rule = classify(p.type)
     const resolved =
       rule.action === 'expense' || rule.action === 'income'
         ? rule.action
         : direction ?? 'expense'
 
-    const note = description || type
-    const fp = fingerprint(date, amount, note)
+    const note = p.description || p.type
+    const fp = fingerprint(p.date, p.amount, note)
 
     rows.push({
-      date,
-      type,
-      description,
-      amount,
-      balance,
+      ...p,
       why: rule.why,
       action: rule.action,
       direction: resolved,
-      categoryId: guessCategory(`${type} ${description}`, learnedRules),
+      categoryId: guessCategory(`${p.type} ${p.description}`, learnedRules),
       // 规则说排除的默认不勾；未知类型默认勾上——漏记比多记更难发现
-      include: rule.action !== 'exclude',
+      include: rule.include ?? rule.action !== 'exclude',
       dup: existingFingerprints?.has(fp) ?? false,
       fp,
     })
   }
 
-  return { rows, rawLines, columns, warnings }
+  for (const line of (ignored ?? []).slice(0, 20)) {
+    warnings.push(`忽略非记录行：${line.slice(0, 70)}`)
+  }
+
+  return { rows, rawLines, columns, warnings, orientation }
 }

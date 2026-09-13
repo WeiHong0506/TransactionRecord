@@ -132,7 +132,7 @@ public/icons/                  PWA 图标（scripts/make-icons.py 生成）
 supabase-schema.sql            云端建表 + 行级安全策略（含 accounts 表，可重复执行）
 src/
   import/
-    pdfTable.js                PDF 表格还原：按坐标合并行、切列、处理折行
+    pdfTable.js                PDF 表格还原：朝向判定、合并行、切列、处理折行
     tngStatement.js            TnG 对账单规则：日期金额解析、交易类型判定、商户归类
   App.jsx                      主界面、底部导航、月份切换
   db.js                        IndexedDB 读写、软删除墓碑、备份导入导出
@@ -198,14 +198,24 @@ node scripts/import-test.mjs
 ```
 
 用一份结构与 TnG 对账单相同的测试 PDF，验证折行合并、页脚过滤、交易类型判定、
-按余额变化定方向、商户自动归类、重复导入去重，以及加密 PDF 的密码流程
-（密码错误提示、正确密码解锁）。
+按余额变化定方向、商户自动归类、重复导入去重，以及加密 PDF 的密码流程。
 
-生成加密的测试文件：
+测试文件有三个变体，内容相同但排版不同，解析结果必须完全一致：
 
 ```bash
-python3 scripts/make-sample-statement.py /tmp/tng-locked.pdf 880506015527
+python3 scripts/make-sample-statement.py /tmp/tng-rot.pdf    -            rotated
+python3 scripts/make-sample-statement.py /tmp/tng-flat.pdf   -            flat
+python3 scripts/make-sample-statement.py /tmp/tng-locked.pdf 880506015527 rotated
 ```
+
+### 为什么要判定页面朝向
+
+真实的 TnG 对账单是把横向表格画在纵向页面上（整体转 90°）。
+按坐标直接分组，得到的是「列」而不是「行」——表面上能跑，
+实际每一行都是一整列的内容拼在一起，全盘错位且不报错。
+
+解析器会依次尝试三种朝向，选能找到表头**并且**解析出记录的那个。
+判据是客观的，不依赖对 PDF 生成器的假设。
 
 > pdf.js 固定在 v4：v6 用了 `Map.getOrInsertComputed` 这类很新的语法，
 > 老一些的手机浏览器（尤其 iOS Safari）会直接报错。这个依赖不要随手升级。
