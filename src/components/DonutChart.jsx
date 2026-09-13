@@ -57,18 +57,34 @@ export default function DonutChart({ rows, total, currency, centerLabel = '合�
   return (
     <div className="chart-wrap">
       <svg viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label="按分类的占比环形图">
-        {slices.map((s, i) => (
-          <path
-            key={s.id}
-            d={arcPath(cx, cy, R_OUT, R_IN, s.start, s.end)}
-            fill={`var(--series-${s.slot})`}
-            opacity={hover != null && hover !== i ? 0.35 : 1}
-            style={{ transition: 'opacity .15s' }}
-            onMouseEnter={() => setHover(i)}
+        {slices.length === 1 ? (
+          // 只有一个分类时扇区跨满 360°，起点终点重合会让弧长为零、什么都画不出来。
+          // 这种情况直接用一个描边整圆来表示这个完整的环。
+          <circle
+            cx={cx}
+            cy={cy}
+            r={(R_OUT + R_IN) / 2}
+            fill="none"
+            stroke={`var(--series-${slices[0].slot})`}
+            strokeWidth={R_OUT - R_IN}
+            onMouseEnter={() => setHover(0)}
             onMouseLeave={() => setHover(null)}
-            onTouchStart={() => setHover(i)}
+            onTouchStart={() => setHover(0)}
           />
-        ))}
+        ) : (
+          slices.map((s, i) => (
+            <path
+              key={s.id}
+              d={arcPath(cx, cy, R_OUT, R_IN, s.start, s.end)}
+              fill={`var(--series-${s.slot})`}
+              opacity={hover != null && hover !== i ? 0.35 : 1}
+              style={{ transition: 'opacity .15s' }}
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+              onTouchStart={() => setHover(i)}
+            />
+          ))
+        )}
         <g className="donut-center" textAnchor="middle">
           <text className="k" x={cx} y={cy - 6}>
             {active ? active.name : `${centerLabel}（${symbolOf(currency)}）`}

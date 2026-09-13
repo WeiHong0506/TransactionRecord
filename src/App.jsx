@@ -174,6 +174,7 @@ export default function App() {
             allRecords={records}
             categories={categories}
             currency={currency}
+            onEdit={(t) => setEditing(t)}
           />
         )}
 

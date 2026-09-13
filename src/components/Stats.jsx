@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import DonutChart from './DonutChart.jsx'
 import TrendChart from './TrendChart.jsx'
+import CalendarView from './CalendarView.jsx'
 import {
   formatAmount,
   formatMoney,
@@ -10,7 +11,15 @@ import {
   sumBy,
 } from '../utils.js'
 
-export default function Stats({ month, monthRecords, allRecords, categories, currency }) {
+export default function Stats({
+  month,
+  monthRecords,
+  allRecords,
+  categories,
+  currency,
+  onEdit,
+}) {
+  const [view, setView] = useState('breakdown') // breakdown | calendar
   const [type, setType] = useState('expense')
 
   const rows = useMemo(
@@ -31,8 +40,25 @@ export default function Stats({ month, monthRecords, allRecords, categories, cur
   const expenseTotal = sumBy(monthRecords, 'expense')
   const avg = dayCount ? expenseTotal / dayCount : 0
 
+  if (view === 'calendar') {
+    return (
+      <div>
+        <ViewTabs view={view} setView={setView} />
+        <CalendarView
+          month={month}
+          records={monthRecords}
+          categories={categories}
+          currency={currency}
+          onEdit={onEdit}
+        />
+      </div>
+    )
+  }
+
   return (
     <div>
+      <ViewTabs view={view} setView={setView} />
+
       <div className="section">
         <div className="section-head">
           <h2>{monthLabel(month)}分类构成</h2>
@@ -122,6 +148,19 @@ export default function Stats({ month, monthRecords, allRecords, categories, cur
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function ViewTabs({ view, setView }) {
+  return (
+    <div className="seg view-tabs" role="group" aria-label="统计视图">
+      <button aria-pressed={view === 'breakdown'} onClick={() => setView('breakdown')}>
+        分类构成
+      </button>
+      <button aria-pressed={view === 'calendar'} onClick={() => setView('calendar')}>
+        日历
+      </button>
     </div>
   )
 }

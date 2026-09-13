@@ -110,6 +110,43 @@ await hideTabbar()
 await page.screenshot({ path: `${SHOTS}/02-stats.png`, fullPage: true })
 await showTabbar()
 
+// 单分类环形图：演示数据里收入只有「工资」一个分类，正好覆盖跨满 360° 的情况
+await page.click('.seg button:has-text("收入")')
+await page.waitForTimeout(300)
+const ringDrawn = await page.evaluate(() => {
+  const svg = document.querySelector('.chart-wrap svg')
+  if (!svg) return { ok: false, why: '找不到图表' }
+  const circle = svg.querySelector('circle')
+  const paths = svg.querySelectorAll('path')
+  const box = (circle ?? paths[0])?.getBoundingClientRect()
+  return { ok: Boolean(box && box.width > 20 && box.height > 20), w: box?.width, mode: circle ? '整圆' : '扇区' }
+})
+console.log(
+  ringDrawn.ok
+    ? `✓ 单分类时环形图正常渲染（${ringDrawn.mode}，宽 ${Math.round(ringDrawn.w)}px）`
+    : `✗ 单分类环形图没画出来：${JSON.stringify(ringDrawn)}`
+)
+await hideTabbar()
+await page.screenshot({ path: `${SHOTS}/08-single-category.png`, fullPage: true })
+await showTabbar()
+await page.click('.seg button:has-text("支出")')
+
+// 日历视图
+await page.click('.view-tabs button:has-text("日历")')
+await page.waitForSelector('.cal-grid')
+await hideTabbar()
+await page.screenshot({ path: `${SHOTS}/09-calendar.png`, fullPage: true })
+await showTabbar()
+
+// 点一天看当日明细
+const dayWithData = page.locator('.cal-cell.has-data').first()
+await dayWithData.click()
+await page.waitForSelector('.row')
+await hideTabbar()
+await page.screenshot({ path: `${SHOTS}/10-calendar-day.png`, fullPage: true })
+await showTabbar()
+console.log('✓ 日历视图与当日明细渲染正常')
+
 await page.click('.tab:has-text("设置")')
 await page.waitForSelector('.note-box')
 await hideTabbar()

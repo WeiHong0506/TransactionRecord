@@ -1,6 +1,7 @@
 import { dateHeading, formatAmount, groupByDate, sumBy } from '../utils.js'
 
-export default function TransactionList({ records, categories, onEdit }) {
+// showDate=false 用于日历视图：那里的日期和合计已经由外层标题给出了
+export default function TransactionList({ records, categories, onEdit, showDate = true }) {
   if (!records.length) {
     return (
       <div className="card empty">
@@ -21,14 +22,16 @@ export default function TransactionList({ records, categories, onEdit }) {
         const inc = sumBy(items, 'income')
         return (
           <div className="day-group" key={date}>
-            <div className="day-head">
-              <span>{dateHeading(date)}</span>
-              <span className="sums">
-                {exp > 0 && <>支出 {formatAmount(exp)}</>}
-                {exp > 0 && inc > 0 && ' · '}
-                {inc > 0 && <>收入 {formatAmount(inc)}</>}
-              </span>
-            </div>
+            {showDate && (
+              <div className="day-head">
+                <span>{dateHeading(date)}</span>
+                <span className="sums">
+                  {exp > 0 && <>支出 {formatAmount(exp)}</>}
+                  {exp > 0 && inc > 0 && ' · '}
+                  {inc > 0 && <>收入 {formatAmount(inc)}</>}
+                </span>
+              </div>
+            )}
             <div className="card">
               {items.map((t) => {
                 const cat = byId.get(t.categoryId)
