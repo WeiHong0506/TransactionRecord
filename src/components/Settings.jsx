@@ -4,7 +4,7 @@ import { clearAllData, exportAll, importAll } from '../db.js'
 import SyncPanel from './SyncPanel.jsx'
 
 // 改动代码时手动 +1。线上「关于」里会显示，用来确认部署的到底是哪一版。
-const APP_VERSION = 'v1.1.0'
+const APP_VERSION = 'v1.1.1'
 
 // iOS 的独立窗口模式里 <a download> 经常被吞掉，优先走系统分享面板
 async function deliverFile(content, filename, mime) {
