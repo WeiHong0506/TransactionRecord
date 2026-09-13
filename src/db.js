@@ -3,7 +3,8 @@ import { DEFAULT_CATEGORIES } from './categories.js'
 
 const DB_NAME = 'transaction-record'
 // v2：为云端同步增加软删除墓碑（deletedAt）和待上传标记（dirty）
-const DB_VERSION = 2
+// v3：补齐 createdAt——v2 漏了它，导致上传时发送 null，撞上云端的非空约束
+const DB_VERSION = 3
 
 let dbPromise = null
 
@@ -19,17 +20,19 @@ function getDB() {
           db.createObjectStore('categories', { keyPath: 'id' })
           db.createObjectStore('settings', { keyPath: 'key' })
         }
-        if (oldVersion < 2) {
-          // 老数据补上同步字段：一律当作「本地已改、待上传」
+        if (oldVersion < 3) {
+          // 老数据补齐同步字段：一律当作「本地已改、待上传」
           for (const name of ['transactions', 'categories']) {
             const store = tx.objectStore(name)
             let cursor = await store.openCursor()
             while (cursor) {
               const v = cursor.value
+              const stamp = v.updatedAt ?? v.createdAt ?? Date.now()
               await cursor.update({
                 ...v,
+                createdAt: v.createdAt ?? stamp,
+                updatedAt: v.updatedAt ?? stamp,
                 deletedAt: v.deletedAt ?? null,
-                updatedAt: v.updatedAt ?? v.createdAt ?? Date.now(),
                 dirty: 1,
               })
               cursor = await cursor.continue()

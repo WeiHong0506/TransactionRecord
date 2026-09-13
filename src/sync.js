@@ -27,9 +27,14 @@ const CURSOR_SKEW_MS = 60_000
 const toIso = (ms) => (ms ? new Date(ms).toISOString() : null)
 const toMs = (iso) => (iso ? Date.parse(iso) : null)
 
+// created_at / updated_at 在云端是非空列。历史数据可能缺字段，
+// 这里兜底，绝不往上发 null——否则整批上传都会被拒。
+const stampOf = (r) => toIso(r.updatedAt ?? r.createdAt ?? Date.now())
+const createdOf = (r) => toIso(r.createdAt ?? r.updatedAt ?? Date.now())
+
 /* ---------------- 本地 ↔ 云端字段映射 ---------------- */
 
-function txToRemote(r, userId) {
+export function txToRemote(r, userId) {
   return {
     id: r.id,
     user_id: userId,
@@ -38,8 +43,8 @@ function txToRemote(r, userId) {
     category_id: r.categoryId,
     note: r.note ?? '',
     date: r.date,
-    created_at: toIso(r.createdAt),
-    updated_at: toIso(r.updatedAt),
+    created_at: createdOf(r),
+    updated_at: stampOf(r),
     deleted_at: toIso(r.deletedAt),
   }
 }
@@ -59,7 +64,7 @@ function txFromRemote(r) {
   }
 }
 
-function catToRemote(c, userId) {
+export function catToRemote(c, userId) {
   return {
     id: c.id,
     user_id: userId,
@@ -68,8 +73,8 @@ function catToRemote(c, userId) {
     type: c.type,
     slot: c.slot ?? 0,
     order: c.order ?? 0,
-    created_at: toIso(c.createdAt),
-    updated_at: toIso(c.updatedAt),
+    created_at: createdOf(c),
+    updated_at: stampOf(c),
     deleted_at: toIso(c.deletedAt),
   }
 }

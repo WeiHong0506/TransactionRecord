@@ -97,5 +97,25 @@ await db.clearDirty('transactions', all.map(({ id, updatedAt }) => ({ id, update
 await db.purgeTombstones(0) // 保留期设为 0，模拟 30 天后
 check('已同步的旧墓碑被清掉', (await db.getDirty('transactions')).length === 0)
 
+console.log('\n[9] 上传载荷里绝不能出现 null 时间戳（云端是非空列）')
+// 回归测试：v2 升级漏补 createdAt，导致老分类上传时发送 null，整批被拒
+const { txToRemote, catToRemote } = await import('../src/sync.js')
+const legacyCat = { id: 'exp-food', name: '餐饮', icon: '🍜', type: 'expense', slot: 1, order: 1 }
+const legacyTx = { id: 'x', type: 'expense', amount: 1, categoryId: 'exp-food', date: '2026-01-01' }
+const payloads = [catToRemote(legacyCat, 'u1'), txToRemote(legacyTx, 'u1')]
+for (const [i, p] of payloads.entries()) {
+  const label = i === 0 ? '分类' : '流水'
+  check(`${label} created_at 非空`, p.created_at !== null && p.created_at !== undefined)
+  check(`${label} updated_at 非空`, p.updated_at !== null && p.updated_at !== undefined)
+  check(`${label} deleted_at 为 null（未删除）`, p.deleted_at === null)
+}
+
+console.log('\n[10] 数据库升级会把老记录的 createdAt 补齐')
+const upgraded = await db.getDirty('categories')
+check(
+  '所有分类都有 createdAt',
+  upgraded.length > 0 && upgraded.every((c) => typeof c.createdAt === 'number')
+)
+
 console.log(`\n${fail === 0 ? '✅' : '❌'} 通过 ${pass} 项，失败 ${fail} 项\n`)
 process.exit(fail === 0 ? 0 : 1)
