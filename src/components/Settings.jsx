@@ -3,6 +3,9 @@ import { CURRENCIES, csvEscape, downloadBlob } from '../utils.js'
 import { clearAllData, exportAll, importAll } from '../db.js'
 import SyncPanel from './SyncPanel.jsx'
 
+// 改动代码时手动 +1。线上「关于」里会显示，用来确认部署的到底是哪一版。
+const APP_VERSION = 'v1.1.0'
+
 // iOS 的独立窗口模式里 <a download> 经常被吞掉，优先走系统分享面板
 async function deliverFile(content, filename, mime) {
   const file = new File([content], filename, { type: mime })
@@ -234,6 +237,8 @@ export default function Settings({
         <div className="card card-pad">
           <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
             记账本 · 离线优先的个人记账工具
+            <br />
+            版本 {APP_VERSION} · 同步 {sync?.configured ? '已配置' : '未配置'}
             <br />
             共 {records.length} 笔记录 · {categories.length} 个分类
             <br />
