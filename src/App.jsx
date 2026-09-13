@@ -284,7 +284,7 @@ export default function App() {
           categories={categories}
           currency={currency}
           defaultAccountId={lastAccountId}
-          onParse={async (file) => {
+          onParse={async (file, password) => {
             // 动态导入：pdf.js 只在真的要解析时才下载
             const [{ parseTngStatement, fingerprint }] = await Promise.all([
               import('./import/tngStatement.js'),
@@ -293,7 +293,11 @@ export default function App() {
               records.map((t) => fingerprint(t.date, t.amount, t.note))
             )
             const learnedRules = (await getSetting('import.rules', {})) ?? {}
-            return parseTngStatement(file, { existingFingerprints: existing, learnedRules })
+            return parseTngStatement(file, {
+              existingFingerprints: existing,
+              learnedRules,
+              password,
+            })
           }}
           onImport={async (rows, accountId) => {
             for (const r of rows) {

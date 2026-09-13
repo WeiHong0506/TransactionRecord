@@ -2,17 +2,22 @@
 数据全是编的，只用来测结构：折行的 Description、抬头/页脚垃圾行、各类交易类型。
 
     pip install reportlab
-    python3 scripts/make-sample-statement.py
+    python3 scripts/make-sample-statement.py [输出路径] [密码]
+
+给了密码就生成加密 PDF——真实的对账单基本都加密，这条路径必须能测。
 """
 from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib import pdfencrypt
 from reportlab.pdfgen import canvas
 import os, sys
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/claude-0/tng-sample.pdf'
+PASSWORD = sys.argv[2] if len(sys.argv) > 2 else None
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 
+enc = pdfencrypt.StandardEncryption(PASSWORD, canPrint=1) if PASSWORD else None
 W, H = landscape(A4)
-c = canvas.Canvas(OUT, pagesize=landscape(A4))
+c = canvas.Canvas(OUT, pagesize=landscape(A4), encrypt=enc)
 cols = [40, 120, 210, 330, 600, 700]
 header = ['Date', 'Status', 'Transaction Type', 'Description', 'Amount (RM)', 'Wallet Balance']
 rows = [
@@ -48,4 +53,4 @@ for date, status, ttype, desc, amt, bal in rows:
 
 c.drawString(40, y-20, 'Total Debit: RM108.55    Total Credit: RM116.25')
 c.save()
-print('wrote', OUT)
+print('wrote', OUT, '(encrypted)' if PASSWORD else '')

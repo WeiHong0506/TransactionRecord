@@ -2,7 +2,13 @@ import { useMemo, useRef, useState } from 'react'
 import Sheet from './Sheet.jsx'
 import { formatAmount, symbolOf } from '../utils.js'
 
-const STATE = { IDLE: 'idle', PARSING: 'parsing', DONE: 'done', ERROR: 'error' }
+const STATE = {
+  IDLE: 'idle',
+  PARSING: 'parsing',
+  PASSWORD: 'password', // 加密 PDF：等用户输密码
+  DONE: 'done',
+  ERROR: 'error',
+}
 
 export default function ImportSheet({
   accounts,
@@ -16,6 +22,10 @@ export default function ImportSheet({
   const fileRef = useRef(null)
   const [state, setState] = useState(STATE.IDLE)
   const [fileName, setFileName] = useState('')
+  // 留着文件引用，输完密码要拿它重试。密码只存在内存里，不落盘、不同步。
+  const [file, setFile] = useState(null)
+  const [password, setPassword] = useState('')
+  const [wrongPassword, setWrongPassword] = useState(false)
   const [rows, setRows] = useState([])
   const [rawLines, setRawLines] = useState([])
   const [warnings, setWarnings] = useState([])
@@ -29,23 +39,36 @@ export default function ImportSheet({
   const dupCount = rows.filter((r) => r.dup).length
   const excluded = rows.length - selected.length - dupCount
 
-  async function handleFile(e) {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    setFileName(file.name)
+  async function parse(f, pwd) {
     setState(STATE.PARSING)
     setError(null)
     try {
-      const res = await onParse(file)
+      const res = await onParse(f, pwd)
       setRows(res.rows)
       setRawLines(res.rawLines ?? [])
       setWarnings(res.warnings ?? [])
       setState(STATE.DONE)
     } catch (err) {
+      if (err?.name === 'PdfPasswordError') {
+        // 加密 PDF 是常规情况而不是错误，引导用户输密码
+        setWrongPassword(Boolean(err.wrong))
+        setState(STATE.PASSWORD)
+        return
+      }
       setError(err?.message || String(err))
       setState(STATE.ERROR)
     }
+  }
+
+  async function handleFile(e) {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    setFile(f)
+    setFileName(f.name)
+    setPassword('')
+    setWrongPassword(false)
+    await parse(f, '')
   }
 
   function patch(i, next) {
@@ -79,6 +102,65 @@ export default function ImportSheet({
             选择 PDF 文件
           </button>
           <input ref={fileRef} type="file" accept="application/pdf,.pdf" hidden onChange={handleFile} />
+        </>
+      )}
+
+      {state === STATE.PASSWORD && (
+        <>
+          <div className="empty" style={{ padding: '20px 12px 8px' }}>
+            <div className="big">🔒</div>
+            <p style={{ color: 'var(--text-primary)', fontSize: 15 }}>这份 PDF 需要密码</p>
+            <p>{fileName}</p>
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (password) parse(file, password)
+            }}
+          >
+            <div className="field">
+              <label htmlFor="pdf-pwd">打开密码</label>
+              <input
+                id="pdf-pwd"
+                className="input"
+                type="password"
+                autoComplete="off"
+                autoFocus
+                placeholder="输入 PDF 密码"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value)
+                  setWrongPassword(false)
+                }}
+              />
+            </div>
+
+            {wrongPassword && (
+              <p className="note-box" style={{ marginTop: 12, color: 'var(--danger)' }}>
+                密码不正确，请再试一次。
+              </p>
+            )}
+
+            <p className="note-box" style={{ marginTop: 12 }}>
+              TnG 对账单的密码通常是<strong>身份证号码</strong>或注册时填的生日。
+              具体以发给你的那封邮件里的说明为准。
+              <br />
+              <br />
+              密码只用于在本机打开这个文件，<strong>不会被保存，也不会离开你的设备</strong>。
+            </p>
+
+            <button className="btn" type="submit" disabled={!password}>
+              解锁并解析
+            </button>
+            <button
+              type="button"
+              className="btn secondary slim"
+              onClick={() => setState(STATE.IDLE)}
+            >
+              换个文件
+            </button>
+          </form>
         </>
       )}
 

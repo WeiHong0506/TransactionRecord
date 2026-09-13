@@ -27,6 +27,19 @@ async function getPdfjs() {
 
 const Y_TOLERANCE = 3 // 同一行的 y 容差（PDF 单位，约等于 pt）
 
+/**
+ * 加密 PDF 的专用错误。
+ * 银行和电子钱包的对账单基本都加密，所以这不是异常情况而是常规路径——
+ * 要让调用方能区分「需要密码」和「密码不对」，才能给出有用的提示。
+ */
+export class PdfPasswordError extends Error {
+  constructor(wrong) {
+    super(wrong ? '密码不正确' : '这份 PDF 有密码保护')
+    this.name = 'PdfPasswordError'
+    this.wrong = wrong
+  }
+}
+
 /** 把一页的文字块按 y 合并成视觉行，每行内按 x 排序 */
 function groupIntoLines(items) {
   const lines = []
@@ -79,14 +92,28 @@ function assignToColumns(line, columns) {
  * @param opts.isRecordStart   判断某行是否开启一条新记录（通常是第一列有日期）
  * @param opts.isContinuation  判断某行是不是上一条记录的折行续写。
  *   不提供的话，所有非记录行都会被当成续写——页脚的「合计」之类会污染最后一条记录。
+ * @param opts.password        加密 PDF 的打开密码
  * @returns { columns, rows, rawLines }  rawLines 供解析失败时排查用
  */
-export async function extractTable(file, { headerMatch, isRecordStart, isContinuation }) {
+export async function extractTable(
+  file,
+  { headerMatch, isRecordStart, isContinuation, password }
+) {
   const pdfjs = await getPdfjs()
   const buf = await file.arrayBuffer()
   // 释放要通过 loadingTask，PDFDocumentProxy 本身没有 destroy()
-  const loadingTask = pdfjs.getDocument({ data: buf })
-  const doc = await loadingTask.promise
+  const loadingTask = pdfjs.getDocument({ data: buf, password: password || undefined })
+
+  let doc
+  try {
+    doc = await loadingTask.promise
+  } catch (err) {
+    if (err?.name === 'PasswordException') {
+      // code 1 = 需要密码，2 = 密码不对
+      throw new PdfPasswordError(err.code === 2)
+    }
+    throw err
+  }
 
   let columns = null
   const rows = []

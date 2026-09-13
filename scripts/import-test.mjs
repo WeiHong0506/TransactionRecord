@@ -8,6 +8,8 @@ import { chromium } from 'playwright'
 
 const BASE = 'http://localhost:4173/TransactionRecord/'
 const PDF = process.env.SAMPLE_PDF ?? '/tmp/claude-0/tng-sample.pdf'
+const LOCKED_PDF = process.env.LOCKED_PDF ?? '/tmp/claude-0/tng-locked.pdf'
+const LOCKED_PWD = process.env.LOCKED_PWD ?? '880506015527'
 const SHOTS = '/tmp/claude-0/shots'
 
 let pass = 0
@@ -39,6 +41,29 @@ await page.click('.tab:has-text("账号")')
 await page.click('.icon-btn[aria-label="设置"]')
 await page.click('.list-item:has-text("导入对账单")')
 await page.waitForSelector('.sheet')
+
+console.log('\n[0] 加密 PDF：应当提示输密码，而不是报解析失败')
+await page.setInputFiles('input[type=file][accept*="pdf"]', LOCKED_PDF)
+await page.waitForSelector('#pdf-pwd', { timeout: 30000 })
+check('加密 PDF 弹出密码输入，而不是错误页', true)
+
+await page.fill('#pdf-pwd', 'wrong-password')
+await page.click('.sheet form .btn:not(.secondary)')
+await page.waitForTimeout(1500)
+const wrongShown = await page.locator('.note-box:has-text("密码不正确")').count()
+check('密码错误时给出明确提示并停留在输入框', wrongShown === 1)
+
+await page.fill('#pdf-pwd', LOCKED_PWD)
+await page.click('.sheet form .btn:not(.secondary)')
+await page.waitForSelector('.import-summary', { timeout: 30000 })
+const lockedNums = await page.$$eval('.import-summary .n', (els) => els.map((e) => e.textContent.trim()))
+check('正确密码解锁后照常解析出 8 条', lockedNums[0] === '8', `实际 ${lockedNums[0]}`)
+await page.screenshot({ path: `${SHOTS}/22-import-password.png` })
+
+// 换回不加密的文件，继续原有测试
+await page.click('.sheet-head .link')
+// 文件输入是隐藏的（由按钮触发），等 attached 而不是 visible
+await page.waitForSelector('input[type=file][accept*="pdf"]', { state: 'attached' })
 
 console.log('\n[1] 解析 PDF')
 await page.setInputFiles('input[type=file][accept*="pdf"]', PDF)

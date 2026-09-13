@@ -1,5 +1,7 @@
 import { extractTable } from './pdfTable.js'
 
+export { PdfPasswordError } from './pdfTable.js'
+
 /**
  * Touch 'n Go eWallet 对账单解析。
  *
@@ -92,11 +94,15 @@ export function fingerprint(date, amount, note) {
  *   rows 每项：{ date, type(交易类型原文), description, amount, balance,
  *               action, why, direction, categoryId, include, dup }
  */
-export async function parseTngStatement(file, { learnedRules, existingFingerprints } = {}) {
+export async function parseTngStatement(
+  file,
+  { learnedRules, existingFingerprints, password } = {}
+) {
   const { columns, rows: raw, rawLines, ignored } = await extractTable(file, {
     headerMatch,
     isRecordStart,
     isContinuation,
+    password,
   })
 
   const warnings = []
