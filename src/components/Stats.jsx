@@ -3,6 +3,7 @@ import DonutChart from './DonutChart.jsx'
 import TrendChart from './TrendChart.jsx'
 import CalendarView from './CalendarView.jsx'
 import TransactionList from './TransactionList.jsx'
+import ListFilter, { EMPTY_FILTER, applyFilter, isFiltered } from './ListFilter.jsx'
 import {
   formatAmount,
   formatMoney,
@@ -23,6 +24,9 @@ export default function Stats({
 }) {
   const [view, setView] = useState('list') // list | calendar | breakdown
   const [type, setType] = useState('expense')
+  const [filter, setFilter] = useState(EMPTY_FILTER)
+
+  const filtered = useMemo(() => applyFilter(monthRecords, filter), [monthRecords, filter])
 
   const rows = useMemo(
     () => groupByCategory(monthRecords, categories, type),
@@ -51,12 +55,27 @@ export default function Stats({
             <h2>收支明细</h2>
             <span className="hint">{monthRecords.length} 笔</span>
           </div>
-          <TransactionList
-            records={monthRecords}
+          <ListFilter
+            filter={filter}
+            setFilter={setFilter}
             categories={categories}
             accounts={accounts}
-            onEdit={onEdit}
+            results={filtered}
           />
+          {filtered.length === 0 && isFiltered(filter) ? (
+            <div className="card empty">
+              <div className="big">🔍</div>
+              <p>没有符合条件的记录</p>
+              <p>换个筛选条件试试</p>
+            </div>
+          ) : (
+            <TransactionList
+              records={filtered}
+              categories={categories}
+              accounts={accounts}
+              onEdit={onEdit}
+            />
+          )}
         </div>
       </div>
     )

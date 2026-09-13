@@ -43,7 +43,7 @@ await page.goto(BASE, { waitUntil: 'networkidle' })
 await page.waitForSelector('.summary')
 
 async function openImport() {
-  await page.click('.tab:has-text("账号")')
+  await page.click('.dock-tab:has-text("账号")')
   await page.click('.icon-btn[aria-label="设置"]')
   await page.click('.list-item:has-text("导入对账单")')
   await page.waitForSelector('.sheet')
@@ -145,7 +145,7 @@ for (const s of selects) {
 await page.click('.sheet > .btn:not(.secondary)')
 await page.waitForTimeout(1500)
 
-await page.click('.tab:has-text("统计")')
+await page.click('.dock-tab:has-text("统计")')
 const target = '2026-08'
 for (let i = 0; i < 24; i++) {
   const label = await page.textContent('.month-switch .label')

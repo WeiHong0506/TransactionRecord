@@ -21,6 +21,7 @@ import Stats from './components/Stats.jsx'
 import Settings from './components/Settings.jsx'
 import AccountsPage from './components/AccountsPage.jsx'
 import ImportSheet from './components/ImportSheet.jsx'
+import TabBar from './components/TabBar.jsx'
 import { useSync } from './useSync.js'
 
 export default function App() {
@@ -243,27 +244,7 @@ export default function App() {
         </>
       )}
 
-      <nav className="tabbar">
-        <div className="tabbar-inner">
-          <button
-            className={`tab ${tab === 'stats' ? 'active' : ''}`}
-            onClick={() => setTab('stats')}
-          >
-            <span className="ico">📊</span>
-            统计
-          </button>
-          <button className="fab" onClick={() => setEditing({})} aria-label="记一笔">
-            ＋
-          </button>
-          <button
-            className={`tab ${tab === 'accounts' || tab === 'settings' ? 'active' : ''}`}
-            onClick={() => setTab('accounts')}
-          >
-            <span className="ico">👛</span>
-            账号
-          </button>
-        </div>
-      </nav>
+      <TabBar tab={tab} setTab={setTab} onAdd={() => setEditing({})} />
 
       {editing && (
         <TransactionSheet

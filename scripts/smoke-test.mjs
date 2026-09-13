@@ -154,7 +154,7 @@ await shot('10-calendar-day')
 console.log('✓ 日历视图与当日明细渲染正常')
 
 // —— 账号管理 ——
-await page.click('.tab:has-text("账号")')
+await page.click('.dock-tab:has-text("账号")')
 await page.waitForSelector('.acct-row')
 const balance = await page.textContent('.summary .hero')
 console.log(`✓ 账号管理页渲染正常，总资产 ${balance.trim()}`)
@@ -192,7 +192,7 @@ await page.keyboard.press('Escape')
 
 // 深色模式
 await page.emulateMedia({ colorScheme: 'dark' })
-await page.click('.tab:has-text("统计")')
+await page.click('.dock-tab:has-text("统计")')
 await page.click('.view-tabs button:has-text("分类构成")')
 await page.waitForSelector('.legend-row')
 await shot('05-dark-breakdown')

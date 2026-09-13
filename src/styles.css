@@ -31,6 +31,12 @@
   --accent-ink: #ffffff;
   --danger: #d03b3b;
 
+  /* 悬浮底栏：浅色模式下是一块浮起的白色胶囊 */
+  --dock: #ffffff;
+  --dock-border: rgba(11, 11, 11, 0.08);
+  --dock-ink: #52514e;
+  --dock-active: color-mix(in srgb, #2a78d6 12%, #ffffff);
+
   --radius: 14px;
   --radius-sm: 10px;
   --shadow: 0 1px 2px rgba(11, 11, 11, 0.06), 0 8px 24px rgba(11, 11, 11, 0.05);
@@ -65,6 +71,11 @@
 
     --accent: #3987e5;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+    /* 深色模式下是深灰胶囊，选中项用更浅一档的底衬 */
+    --dock: #222221;
+    --dock-border: rgba(255, 255, 255, 0.08);
+    --dock-ink: #e8e7e1;
+    --dock-active: #323230;
   }
 }
 
@@ -92,6 +103,10 @@
   --series-8: #e66767;
   --accent: #3987e5;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+  --dock: #222221;
+  --dock-border: rgba(255, 255, 255, 0.08);
+  --dock-ink: #e8e7e1;
+  --dock-active: #323230;
 }
 
 /* ============ 基础 ============ */
@@ -133,7 +148,8 @@ button {
   max-width: 560px;
   margin: 0 auto;
   min-height: 100dvh;
-  padding: 0 16px calc(84px + env(safe-area-inset-bottom));
+  /* 悬浮胶囊比旧的贴边底栏更高（58px 按钮 + 14px 外边距），留够空隙免得压住最后一张卡片 */
+  padding: 0 16px calc(96px + env(safe-area-inset-bottom));
   padding-top: env(safe-area-inset-top);
 }
 
@@ -411,6 +427,7 @@ button {
 }
 
 /* ============ 底部导航 ============ */
+/* 悬浮胶囊：两个 tab 装在胶囊里，记一笔按钮独立浮在右边 */
 .tabbar {
   position: fixed;
   left: 0;
@@ -418,61 +435,136 @@ button {
   bottom: 0;
   z-index: 30;
   display: flex;
-  justify-content: center;
-  gap: 4px;
-  padding: 6px 12px calc(6px + env(safe-area-inset-bottom));
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  backdrop-filter: saturate(180%) blur(16px);
-  border-top: 1px solid var(--border);
-}
-
-.tabbar-inner {
-  display: flex;
-  width: 100%;
-  max-width: 560px;
   align-items: center;
-  justify-content: space-around;
-  gap: 8px;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 16px calc(14px + env(safe-area-inset-bottom));
+  pointer-events: none; /* 只有胶囊和按钮本身可点，两侧留白不挡内容 */
 }
 
-.tab {
-  flex: 1;
+.dock,
+.tabbar .fab {
+  pointer-events: auto;
+}
+
+.dock {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 999px;
+  background: var(--dock);
+  border: 1px solid var(--dock-border);
+  box-shadow: 0 6px 24px rgba(11, 11, 11, 0.14), 0 2px 6px rgba(11, 11, 11, 0.08);
+  backdrop-filter: saturate(180%) blur(16px);
+}
+
+.dock-tab {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 6px 0 2px;
-  color: var(--text-muted);
-  font-size: 11px;
-  border-radius: 10px;
+  justify-content: center;
+  gap: 3px;
+  min-width: 82px;
+  padding: 8px 14px 7px;
+  border-radius: 999px;
+  color: var(--dock-ink);
+  font-size: 11.5px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
 }
 
-.tab.active {
+.dock-tab .lb {
+  font-weight: 550;
+  letter-spacing: 0.01em;
+}
+
+.dock-tab.active {
+  background: var(--dock-active);
   color: var(--accent);
 }
 
-.tab .ico {
-  font-size: 18px;
-  line-height: 1;
+.dock-tab:active {
+  transform: scale(0.96);
 }
 
-.fab {
-  width: 52px;
-  height: 52px;
-  margin: -18px 4px 0;
-  border-radius: 18px;
+.tabbar .fab {
+  width: 58px;
+  height: 58px;
+  flex: none;
+  border-radius: 999px;
   background: var(--accent);
   color: var(--accent-ink);
-  font-size: 26px;
-  font-weight: 300;
   display: grid;
   place-items: center;
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 40%, transparent);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.tabbar .fab:active {
+  transform: scale(0.94);
+}
+
+/* ============ 筛选 ============ */
+.filter {
+  margin-bottom: 12px;
+}
+
+.filter-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 14px;
+}
+
+.filter-search .ico {
+  font-size: 13px;
+  opacity: 0.6;
   flex: none;
 }
 
-.fab:active {
-  transform: scale(0.95);
+.filter-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font-size: 14px;
+}
+
+.filter-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.filter-search .clear {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--accent);
+  padding: 2px 4px;
+}
+
+.filter-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.filter-row .input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 8px;
+  font-size: 12.5px;
+  border-radius: 9px;
+}
+
+.filter-summary {
+  margin-top: 8px;
+  padding: 0 4px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ============ 弹层 ============ */

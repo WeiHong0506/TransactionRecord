@@ -5,7 +5,8 @@ const DB_NAME = 'transaction-record'
 // v2：为云端同步增加软删除墓碑（deletedAt）和待上传标记（dirty）
 // v3：补齐 createdAt——v2 漏了它，导致上传时发送 null，撞上云端的非空约束
 // v4：引入资金账户，历史流水回填到默认账户
-const DB_VERSION = 4
+// v5：补齐后来新增的默认分类（老用户的分类表是在 v1 就建好的，不会自动拿到新分类）
+const DB_VERSION = 5
 
 let dbPromise = null
 
@@ -38,6 +39,17 @@ function getDB() {
               })
               cursor = await cursor.continue()
             }
+          }
+        }
+        if (oldVersion < 5 && oldVersion >= 1) {
+          // 只补「缺了的」，不动用户改过或删过的分类。
+          // 用户主动删掉的分类留有墓碑，这里会跳过，不会被复活。
+          const store = tx.objectStore('categories')
+          const existing = new Set((await store.getAll()).map((c) => c.id))
+          const now = Date.now()
+          for (const c of DEFAULT_CATEGORIES) {
+            if (existing.has(c.id)) continue
+            await store.put({ ...c, createdAt: now, updatedAt: now, deletedAt: null, dirty: 1 })
           }
         }
         if (oldVersion < 4) {
