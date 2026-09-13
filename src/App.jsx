@@ -20,6 +20,7 @@ import CategoryManager from './components/CategoryManager.jsx'
 import Stats from './components/Stats.jsx'
 import Settings from './components/Settings.jsx'
 import AccountsPage from './components/AccountsPage.jsx'
+import ImportSheet from './components/ImportSheet.jsx'
 import { useSync } from './useSync.js'
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
   const [theme, setTheme] = useState('system')
   const [editing, setEditing] = useState(null)
   const [showCategories, setShowCategories] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [toastMsg, setToastMsg] = useState(null)
   const [lastBackup, setLastBackup] = useState(null)
   const [lastAccountId, setLastAccountId] = useState(null)
@@ -228,6 +230,7 @@ export default function App() {
             }}
             lastBackup={lastBackup}
             onOpenCategories={() => setShowCategories(true)}
+            onOpenImport={() => setShowImport(true)}
             onReload={async () => {
               setLastBackup(localStorage.getItem('lastBackup'))
               await reload()
@@ -272,6 +275,56 @@ export default function App() {
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {showImport && (
+        <ImportSheet
+          accounts={accounts}
+          categories={categories}
+          currency={currency}
+          defaultAccountId={lastAccountId}
+          onParse={async (file) => {
+            // 动态导入：pdf.js 只在真的要解析时才下载
+            const [{ parseTngStatement, fingerprint }] = await Promise.all([
+              import('./import/tngStatement.js'),
+            ])
+            const existing = new Set(
+              records.map((t) => fingerprint(t.date, t.amount, t.note))
+            )
+            const learnedRules = (await getSetting('import.rules', {})) ?? {}
+            return parseTngStatement(file, { existingFingerprints: existing, learnedRules })
+          }}
+          onImport={async (rows, accountId) => {
+            for (const r of rows) {
+              await saveTransaction({
+                type: r.direction,
+                amount: r.amount,
+                categoryId: r.categoryId,
+                accountId,
+                date: r.date,
+                note: r.description || r.type,
+              })
+            }
+            // 记住这次的分类判断，下个月导入时自动套用
+            const learned = { ...((await getSetting('import.rules', {})) ?? {}) }
+            for (const r of rows) {
+              const kw = String(r.description || '')
+                .split(/\s+/)
+                .filter((w) => w.length >= 3)
+                .slice(0, 2)
+                .join(' ')
+                .toLowerCase()
+              if (kw && r.categoryId) learned[kw] = r.categoryId
+            }
+            await setSetting('import.rules', learned)
+
+            setShowImport(false)
+            await reload()
+            toast(`已导入 ${rows.length} 笔`)
+            sync.scheduleSync()
+          }}
+          onClose={() => setShowImport(false)}
         />
       )}
 

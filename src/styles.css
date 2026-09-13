@@ -809,6 +809,130 @@ select.input {
   gap: 5px;
 }
 
+/* ============ 对账单导入 ============ */
+.import-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 8px;
+}
+
+.import-summary > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.import-summary .n {
+  font-size: 20px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.import-summary .k {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.imp-row {
+  display: flex;
+  gap: 10px;
+  padding: 11px 12px;
+  align-items: flex-start;
+}
+
+.imp-row + .imp-row {
+  border-top: 1px solid var(--border);
+}
+
+.imp-row.dup {
+  opacity: 0.45;
+}
+
+.imp-check {
+  padding-top: 2px;
+  flex: none;
+}
+
+.imp-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.imp-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.imp-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.imp-desc {
+  font-size: 13.5px;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imp-amt {
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.imp-amt.income {
+  color: var(--income);
+}
+
+.imp-meta {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.imp-controls {
+  display: flex;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.imp-select {
+  padding: 6px 8px;
+  font-size: 12.5px;
+  border-radius: 8px;
+}
+
+.imp-select:first-child {
+  width: 78px;
+  flex: none;
+}
+
+.raw-text {
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  font-size: 10.5px;
+  line-height: 1.5;
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-secondary);
+}
+
 /* ============ 账号管理 ============ */
 .page-title {
   font-size: 18px;

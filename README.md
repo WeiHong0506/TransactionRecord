@@ -7,6 +7,7 @@
 - 统计分两个视图：**分类构成**（占比环形图、近 6 个月收支对比、本月小结）和**日历**（每天的收支一目了然，点某天展开当日明细并可直接编辑）
 - 完整离线可用（Service Worker 预缓存），断网照常记账
 - 一键导出 JSON 备份 / CSV 明细，可再导入恢复
+- **导入 PDF 对账单**（Touch 'n Go eWallet）：自动识别充值/转账并排除、按商户名归类、重复导入自动去重。解析全程在浏览器里，文件不上传
 - 浅色 / 深色两套配色，跟随系统或手动切换
 - 默认马来西亚令吉（RM），可在设置里改
 
@@ -130,6 +131,9 @@ public/icons/                  PWA 图标（scripts/make-icons.py 生成）
 .env                           Supabase 连接参数（可公开，安全性靠 RLS）
 supabase-schema.sql            云端建表 + 行级安全策略（含 accounts 表，可重复执行）
 src/
+  import/
+    pdfTable.js                PDF 表格还原：按坐标合并行、切列、处理折行
+    tngStatement.js            TnG 对账单规则：日期金额解析、交易类型判定、商户归类
   App.jsx                      主界面、底部导航、月份切换
   db.js                        IndexedDB 读写、软删除墓碑、备份导入导出
   supabase.js                  Supabase 客户端（未配置时整体降级为纯本地）
@@ -149,10 +153,13 @@ src/
     CategoryManager.jsx        分类增删改
     Settings.jsx               偏好、备份、清空数据
     SyncPanel.jsx              账号与同步状态
+    ImportSheet.jsx            对账单导入：预览、逐条确认、去重
 scripts/
   make-icons.py                重新生成各尺寸图标
   smoke-test.mjs               生产构建冒烟测试（含离线验证）
   sync-logic-test.mjs          同步逻辑单元测试（冲突合并、墓碑、脏标记）
+  make-sample-statement.py     生成结构相同的测试对账单 PDF（数据全是编的）
+  import-test.mjs              对账单导入端到端测试
 ```
 
 ### 配色说明
@@ -181,3 +188,14 @@ node scripts/smoke-test.mjs
 ```
 
 会走一遍记账流程、截图各个页面，并验证断网后仍能打开。
+
+**对账单导入测试**：
+
+```bash
+pip install reportlab
+python3 scripts/make-sample-statement.py
+node scripts/import-test.mjs
+```
+
+用一份结构与 TnG 对账单相同的测试 PDF，验证折行合并、页脚过滤、交易类型判定、
+按余额变化定方向、商户自动归类、重复导入去重。

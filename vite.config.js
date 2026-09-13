@@ -39,6 +39,20 @@ export default defineConfig({
       workbox: {
         // 应用本体全部预缓存，断网也能完整打开
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // pdf.js 有 400KB+（worker 更是 2MB+），只有导入对账单时才用得上。
+        // 预缓存它会让安装体积翻倍，所以改成首次用到时再下载并长期缓存——
+        // 用过一次之后，离线也能继续导入。
+        globIgnores: ['**/pdf*.js', '**/pdf*.mjs'],
+        runtimeCaching: [
+          {
+            urlPattern: /\/assets\/pdf.*\.(?:js|mjs)$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'pdfjs',
+              expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 180 },
+            },
+          },
+        ],
         navigateFallback: BASE + 'index.html',
         cleanupOutdatedCaches: true,
       },
