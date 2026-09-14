@@ -319,6 +319,34 @@ await page.waitForSelector('.cal-grid')
 await shot('13-dark-calendar')
 await page.emulateMedia({ colorScheme: 'light' })
 
+// —— 汇率输入：逐字符敲，0 和小数点都必须留得住 ——
+// 这个曾经是坏的：输入框的值从已存数字反推，按下 0 的瞬间就被当成清空。
+await page.click('.dock-tab:has-text("资产")')
+await page.waitForSelector('.acct-row')
+await page.click('.btn.secondary:has-text("新增账户")')
+await page.waitForSelector('#acc-cur')
+await page.fill('#acc-name', '支付宝')
+await page.selectOption('#acc-cur', 'CNY')
+await page.click('.sheet .btn:has-text("保存")')
+await page.waitForTimeout(500)
+await page.click('.icon-btn[aria-label="设置"]')
+await page.waitForSelector('.fx-input')
+await page.click('.fx-input')
+const typed = []
+for (const ch of '0.63') {
+  await page.type('.fx-input', ch, { delay: 40 })
+  typed.push(await page.inputValue('.fx-input'))
+}
+console.log(
+  typed.join('|') === '0|0.|0.6|0.63'
+    ? '✓ 汇率能逐字符输入 0 和小数点'
+    : `✗ 汇率输入被吞字符：${typed.join(' → ')}`
+)
+await page.locator('.fx-input').blur()
+await page.waitForTimeout(300)
+const settled = await page.inputValue('.fx-input')
+console.log(settled === '0.63' ? '✓ 失焦后汇率保持 0.63' : `✗ 失焦后变成 ${settled}`)
+
 // —— 离线验证：Service Worker 接管后断网仍能打开 ——
 await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, {
   timeout: 15000,

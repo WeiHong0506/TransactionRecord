@@ -4,7 +4,7 @@ import { clearAllData, exportAll, importAll } from '../db.js'
 import SyncPanel from './SyncPanel.jsx'
 
 // 改动代码时手动 +1。线上「关于」里会显示，用来确认部署的到底是哪一版。
-const APP_VERSION = 'v1.8.1'
+const APP_VERSION = 'v1.8.2'
 
 // iOS 的独立窗口模式里 <a download> 经常被吞掉，优先走系统分享面板
 async function deliverFile(content, filename, mime) {
@@ -281,6 +281,16 @@ export default function Settings({
  * 而且自动汇率会让人误以为总资产是精确的。它永远是估算。
  */
 function FxPanel({ currency, fx, accounts, onFxChange }) {
+  /**
+   * 编辑中的原始文本单独存一份。
+   *
+   * 之前直接把输入框的值从已存的数字反推，结果「0」「0.」「0.63」这些
+   * 输入中途的文本没法用一个合法正数表示——按下 0 的瞬间就被当成
+   * 「清空汇率」，输入框自己弹回空的，于是永远打不出 0.63。
+   * 文本归文本，数字归数字，中间状态才有地方待。
+   */
+  const [drafts, setDrafts] = useState({})
+
   // 用到的外币，按账户出现顺序去重
   const codes = []
   for (const a of accounts) {
@@ -291,6 +301,28 @@ function FxPanel({ currency, fx, accounts, onFxChange }) {
 
   const homeSym = symbolOf(currency)
 
+  function edit(code, text) {
+    const v = text.replace(/[^0-9.]/g, '')
+    // 最多一个小数点、四位小数——汇率用不到更精细
+    if (!/^\d*\.?\d{0,4}$/.test(v)) return
+    setDrafts((d) => ({ ...d, [code]: v }))
+
+    const n = Number(v)
+    const next = { ...(fx ?? {}), [currency]: 1 }
+    // 解析不出正数就先不写（可能只是打到一半），并把这个货币标回未设置
+    if (v === '' || !Number.isFinite(n) || n <= 0) delete next[code]
+    else next[code] = n
+    onFxChange(next)
+  }
+
+  // 失焦时丢掉草稿，让显示回到规范化后的存储值（0.630 → 0.63）
+  function settle(code) {
+    setDrafts((d) => {
+      const { [code]: _drop, ...rest } = d
+      return rest
+    })
+  }
+
   return (
     <div className="section">
       <div className="section-head">
@@ -299,8 +331,9 @@ function FxPanel({ currency, fx, accounts, onFxChange }) {
       </div>
       <div className="card">
         {codes.map((code) => {
-          const raw = fx?.[code]
-          const val = Number.isFinite(Number(raw)) && Number(raw) > 0 ? String(raw) : ''
+          const stored = Number(fx?.[code])
+          const saved = Number.isFinite(stored) && stored > 0 ? String(stored) : ''
+          const shown = drafts[code] ?? saved
           return (
             <div className="list-item fx-item" key={code}>
               <span className="li-main">
@@ -308,8 +341,8 @@ function FxPanel({ currency, fx, accounts, onFxChange }) {
                   1 {symbolOf(code)} = ? {homeSym}
                 </span>
                 <span className="li-sub">
-                  {val
-                    ? `${symbolOf(code)} 100 ≈ ${homeSym} ${formatAmount(Number(val) * 100)}`
+                  {saved
+                    ? `${symbolOf(code)} 100 ≈ ${homeSym} ${formatAmount(Number(saved) * 100)}`
                     : '未设置，相关账户和记录暂不计入统计'}
                 </span>
               </span>
@@ -319,17 +352,9 @@ function FxPanel({ currency, fx, accounts, onFxChange }) {
                 inputMode="decimal"
                 placeholder="0.00"
                 aria-label={`1 ${code} 兑 ${currency}`}
-                value={val}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/[^0-9.]/g, '')
-                  if (!/^\d*\.?\d{0,4}$/.test(v)) return
-                  const next = { ...(fx ?? {}), [currency]: 1 }
-                  // 空值就把这个货币从表里删掉，回到「未设置」，
-                  // 而不是留个 0 让后面的折算算出一堆 0
-                  if (v === '' || Number(v) <= 0) delete next[code]
-                  else next[code] = Number(v)
-                  onFxChange(next)
-                }}
+                value={shown}
+                onChange={(e) => edit(code, e.target.value)}
+                onBlur={() => settle(code)}
               />
             </div>
           )
