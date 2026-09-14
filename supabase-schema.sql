@@ -38,6 +38,16 @@ create table if not exists public.accounts (
 alter table public.transactions
   add column if not exists account_id text;
 
+-- 多货币：每笔流水记住自己当初是用什么钱付的。
+-- 默认 MYR 是为了让迁移前的历史行自动获得正确的货币——
+-- 在此之前全库只有一种货币，就是当时设置里那一个。
+alter table public.transactions
+  add column if not exists currency text not null default 'MYR';
+
+-- 账户也一样：一个账户只持有一种货币，这是它所有流水的计价单位
+alter table public.accounts
+  add column if not exists currency text not null default 'MYR';
+
 -- ---------- 分类 ----------
 create table if not exists public.categories (
   id         text        primary key,

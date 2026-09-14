@@ -146,7 +146,7 @@ src/
     TransactionSheet.jsx       记一笔 / 编辑弹层
     TransactionList.jsx        按日分组的流水列表
     Stats.jsx                  统计页
-    AccountsPage.jsx           账号管理：总资产、各账户余额、增删改账户
+    AccountsPage.jsx           资产：总资产、各账户余额、增删改账户
     CalendarView.jsx           日历视图：每日收支 + 当日明细
     DonutChart.jsx             分类占比环形图（手写 SVG）
     TrendChart.jsx             近 6 个月收支柱状图（手写 SVG）

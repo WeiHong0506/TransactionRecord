@@ -15,6 +15,23 @@ mkdirSync(SHOTS, { recursive: true })
 const browser = await chromium.launch(
   process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}
 )
+// 用自建键盘输金额（页面上已经没有 input 了，系统键盘永远不会弹）
+const PAD_LABEL = { '.': '小数点' }
+async function typeAmount(page, digits) {
+  if ((await page.locator('.pad-sheet[data-open="true"]').count()) === 0) {
+    await page.click('#amt')
+    await page.waitForTimeout(350)
+  }
+  for (const ch of String(digits)) {
+    const sel = PAD_LABEL[ch]
+      ? `.pad-key[aria-label="${PAD_LABEL[ch]}"]`
+      : `.pad-key:text-is("${ch}")`
+    await page.click(sel)
+  }
+  await page.click('.pad-key.done')
+  await page.waitForTimeout(320)
+}
+
 const ctx = await browser.newContext({
   viewport: { width: 414, height: 896 },
   deviceScaleFactor: 2,
@@ -48,7 +65,7 @@ await page.waitForSelector('.summary')
 
 // —— 通过界面记一笔，验证表单链路 ——
 await page.click('.fab')
-await page.fill('#amt', '38.50')
+await typeAmount(page, '38.50')
 await page.click('.cat-chip:has-text("餐饮")')
 await page.fill('#note', '和同事午饭')
 await page.click('button[type="submit"]')
@@ -153,11 +170,11 @@ await page.waitForSelector('.row')
 await shot('10-calendar-day')
 console.log('✓ 日历视图与当日明细渲染正常')
 
-// —— 账号管理 ——
-await page.click('.dock-tab:has-text("账号")')
+// —— 资产 ——
+await page.click('.dock-tab:has-text("资产")')
 await page.waitForSelector('.acct-row')
 const balance = await page.textContent('.summary .hero')
-console.log(`✓ 账号管理页渲染正常，总资产 ${balance.trim()}`)
+console.log(`✓ 资产页渲染正常，总资产 ${balance.trim()}`)
 await shot('11-accounts')
 
 // 新增一个账户
@@ -173,13 +190,13 @@ console.log(
 )
 await shot('12-accounts-two')
 
-// —— 设置（从账号页右上角齿轮进入）——
+// —— 设置（从资产页右上角齿轮进入）——
 await page.click('.icon-btn[aria-label="设置"]')
 await page.waitForSelector('.note-box')
 await shot('03-settings')
 await page.click('.icon-btn[aria-label="返回"]')
 await page.waitForSelector('.acct-row')
-console.log('✓ 设置页可从账号页进入并返回')
+console.log('✓ 设置页可从资产页进入并返回')
 
 // 记账整页表单（现在带账户选择）
 await page.click('.fab')
@@ -195,6 +212,60 @@ const dateFits = await page.evaluate(() => {
   return r.right <= box.right + 0.5 && r.width > 80 && document.documentElement.scrollWidth <= innerWidth
 })
 console.log(dateFits ? '✓ 日期字段没有超出屏幕' : '✗ 日期字段超出屏幕')
+
+// 页面上不该再有任何会唤起系统键盘的金额输入框
+const noNativeInput = await page.evaluate(() => {
+  const el = document.querySelector('#amt')
+  return el && el.tagName === 'BUTTON' && !document.querySelector('.page-form input[inputmode]')
+})
+console.log(noNativeInput ? '✓ 金额栏是按钮，不会唤起系统键盘' : '✗ 金额栏仍是原生输入框')
+
+// 税费：87 开服务费 10% + SST 6% → 100.92（两项都按小计，不叠加）
+// 新记一笔时键盘本来就是开着的，再点一下反而会收起来
+async function ensurePad(page) {
+  if ((await page.locator('.pad-sheet[data-open="true"]').count()) === 0) {
+    await page.click('#amt')
+    await page.waitForTimeout(350)
+  }
+}
+await ensurePad(page)
+for (const d of '87') await page.click(`.pad-key:text-is("${d}")`)
+await page.click('.tax-toggle:text-is("服务费")')
+await page.click('.tax-toggle:text-is("SST")')
+await page.waitForTimeout(250)
+const taxed = await page.textContent('.amount-field .amt-val')
+console.log(
+  taxed.trim() === '100.92' ? '✓ 服务费 + SST 按小计算，合计 100.92' : `✗ 税费算错：${taxed}`
+)
+await page.screenshot({ path: `${SHOTS}/06-pad-tax.png` })
+
+// 关掉键盘再点开，已加的税费必须还在——这是修过的 bug
+await page.click('.pad-key.done')
+await page.waitForTimeout(350)
+const afterClose = await page.textContent('.amount-field .amt-val')
+await page.click('#amt')
+await page.waitForTimeout(350)
+const afterReopen = await page.textContent('.amount-field .amt-val')
+console.log(
+  afterClose.trim() === '100.92' && afterReopen.trim() === '100.92'
+    ? '✓ 关掉键盘再点开，税费没丢'
+    : `✗ 重开键盘后金额变了：${afterClose} → ${afterReopen}`
+)
+
+// 税率可改：把服务费改成 0 → 只剩 SST 6% → 92.22
+await page.click('.tax-rate >> nth=0')
+await page.waitForTimeout(250)
+await page.click('.pad-key[aria-label="退格"]')
+await page.click('.pad-key[aria-label="退格"]')
+await page.click('.pad-key:text-is("5")')
+await page.click('.pad-key.done')
+await page.waitForTimeout(250)
+const reRated = await page.textContent('.amount-field .amt-val')
+console.log(
+  reRated.trim() === '96.57' ? '✓ 税率改成 5% 后重算为 96.57' : `✗ 改税率后算错：${reRated}`
+)
+await page.click('.pad-key.done')
+await page.waitForTimeout(350)
 await page.screenshot({ path: `${SHOTS}/04-add.png` })
 // 底栏不能透过整页表单露出来
 const dockHidden = await page.evaluate(() => {
@@ -204,6 +275,20 @@ const dockHidden = await page.evaluate(() => {
   return document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2)?.closest('.dock') === null
 })
 console.log(dockHidden ? '✓ 整页表单盖住了底栏' : '✗ 底栏透出来了')
+// 表单打开时背景不能再滚动；关掉之后滚动位置要回到原处
+const scrollLock = await page.evaluate(async () => {
+  const before = document.body.style.position
+  window.scrollTo(0, 0)
+  document.documentElement.scrollTop = 400
+  document.body.scrollTop = 400
+  await new Promise((r) => setTimeout(r, 120))
+  return { locked: before === 'fixed', scrolled: window.scrollY }
+})
+console.log(
+  scrollLock.locked && scrollLock.scrolled === 0
+    ? '✓ 表单打开时背景被钉住，滑不动'
+    : `✗ 背景仍可滚动：${JSON.stringify(scrollLock)}`
+)
 // 安卓返回键 / 浏览器后退应当只关掉这一页，不退出应用
 await page.goBack()
 await page.waitForTimeout(300)

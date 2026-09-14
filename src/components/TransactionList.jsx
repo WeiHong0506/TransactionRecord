@@ -1,10 +1,11 @@
-import { dateHeading, formatAmount, groupByDate, sumBy } from '../utils.js'
+import { dateHeading, formatAmount, groupByDate, sumBy, symbolOf } from '../utils.js'
 
 // showDate=false 用于日历视图：那里的日期和合计已经由外层标题给出了
 export default function TransactionList({
   records,
   categories,
   accounts = [],
+  currency = 'MYR',
   onEdit,
   showDate = true,
 }) {
@@ -22,6 +23,9 @@ export default function TransactionList({
   const accById = new Map(accounts.map((a) => [a.id, a]))
   // 只有一个账户时，每行都标同一个账户名是纯噪音，还占掉备注的位置
   const showAccount = accounts.length > 1
+  // 有外币记录时，日合计是折算后的主货币，得把符号标出来，
+  // 否则「支出 245.00」会被误读成当天那笔 ¥245
+  const mixed = records.some((t) => t.currency && t.currency !== currency)
   const days = groupByDate(records)
 
   return (
@@ -35,9 +39,19 @@ export default function TransactionList({
               <div className="day-head">
                 <span>{dateHeading(date)}</span>
                 <span className="sums">
-                  {exp > 0 && <>支出 {formatAmount(exp)}</>}
+                  {exp > 0 && (
+                    <>
+                      支出 {mixed && symbolOf(currency) + ' '}
+                      {formatAmount(exp)}
+                    </>
+                  )}
                   {exp > 0 && inc > 0 && ' · '}
-                  {inc > 0 && <>收入 {formatAmount(inc)}</>}
+                  {inc > 0 && (
+                    <>
+                      收入 {mixed && symbolOf(currency) + ' '}
+                      {formatAmount(inc)}
+                    </>
+                  )}
                 </span>
               </div>
             )}
@@ -58,6 +72,8 @@ export default function TransactionList({
                     </span>
                     <span className={`amt ${t.type}`}>
                       {t.type === 'expense' ? '-' : '+'}
+                      {/* 行内金额永远是当初真实付出去的那个数和那个币种，不折算 */}
+                      {t.currency && t.currency !== currency && symbolOf(t.currency) + ' '}
                       {formatAmount(t.amount)}
                     </span>
                   </button>

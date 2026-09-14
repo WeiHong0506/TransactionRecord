@@ -27,7 +27,7 @@ export const DEFAULT_CATEGORIES = [
 
 // 资金账户：现金、银行卡、电子钱包等。每笔流水都归属到一个账户。
 export const DEFAULT_ACCOUNTS = [
-  { id: 'acc-cash', name: '现金', icon: '💵', slot: 6, initialBalance: 0, order: 1 },
+  { id: 'acc-cash', name: '现金', icon: '💵', slot: 6, initialBalance: 0, order: 1, currency: 'MYR' },
 ]
 
 export const ACCOUNT_ICON_CHOICES = [

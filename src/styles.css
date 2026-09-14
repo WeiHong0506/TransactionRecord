@@ -31,6 +31,10 @@
   --accent-ink: #ffffff;
   --danger: #d03b3b;
 
+  /* 税费（服务费 / SST）：暖棕，和蓝色主色拉开，也不撞支出的红 */
+  --tax: #b4600f;
+  --tax-wash: color-mix(in srgb, #b4600f 12%, #fcfcfb);
+
   /* 悬浮底栏：浅色模式下是一块浮起的白色胶囊 */
   --dock: #ffffff;
   --dock-border: rgba(11, 11, 11, 0.08);
@@ -71,6 +75,9 @@
 
     --accent: #3987e5;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+    --tax: #e0a760;
+    --tax-wash: color-mix(in srgb, #e0a760 16%, #1a1a19);
+
     /* 深色模式下是深灰胶囊，选中项用更浅一档的底衬 */
     --dock: #222221;
     --dock-border: rgba(255, 255, 255, 0.08);
@@ -103,6 +110,8 @@
   --series-8: #e66767;
   --accent: #3987e5;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+  --tax: #e0a760;
+  --tax-wash: color-mix(in srgb, #e0a760 16%, #1a1a19);
   --dock: #222221;
   --dock-border: rgba(255, 255, 255, 0.08);
   --dock-ink: #e8e7e1;
@@ -634,6 +643,8 @@ button {
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  /* 滚到头就停住，不把滚动传递给底下那一页 */
+  overscroll-behavior: contain;
   padding: 14px 16px 20px;
 }
 
@@ -780,14 +791,47 @@ button {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+/* 金额栏现在是个按钮：点它唤起自建键盘，所以必须看起来可点 */
 .amount-field {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  text-align: left;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px 16px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.amount-field[data-active='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.amount-field .amt-val {
+  flex: 1;
+  min-width: 0;
+  font-size: 30px;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.amount-field .amt-val[data-empty='true'] { color: var(--text-muted); }
+
+/* 税费徽记：保存之前一直挂着，解释金额为什么不等于你打进去的那个数 */
+.tax-mark {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--tax);
+  background: var(--tax-wash);
+  border: 1px solid color-mix(in srgb, var(--tax) 32%, transparent);
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
 }
 
 .amount-field .sym {
@@ -1151,7 +1195,7 @@ select.input {
   color: var(--text-secondary);
 }
 
-/* ============ 账号管理 ============ */
+/* ============ 资产 ============ */
 .page-title {
   font-size: 18px;
   font-weight: 650;
@@ -1419,6 +1463,70 @@ select.input {
   line-height: 1.65;
 }
 
+/* 需要用户去处理的提示（例如汇率没设），整块可点，直接跳到设置 */
+button.note-box {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 12px;
+}
+
+.note-box.warn {
+  background: color-mix(in srgb, var(--series-4) 14%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--series-4) 38%, transparent);
+  color: var(--text-primary);
+}
+
+/* ============ 多货币 ============ */
+/* 外币标记：跟在账户名后面的一小块 code，比塞进名字里更容易一眼扫到 */
+.cur-tag {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  vertical-align: 1px;
+}
+
+.acct-chip .cur-tag {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+/* 余额右侧改成两行：上面是账户自己的货币，下面是折算估算值 */
+.bal-col {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.bal-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.fx-note {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.fx-item .fx-input {
+  width: 96px;
+  flex: none;
+  padding: 7px 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .toast {
   position: fixed;
   left: 50%;
@@ -1484,4 +1592,254 @@ details.table-toggle[open] > summary::before {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ============ 自建金额键盘 ============ */
+/* 键盘是页面的一部分，不是系统键盘——视口不会被压矮，页面也就不会重排。
+   一直挂载，只切显隐：收起键盘不该清掉算式和税费开关。 */
+.pad-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -1px 0 var(--border), 0 -10px 30px rgba(11, 11, 11, 0.08);
+  padding: 10px 10px calc(14px + env(safe-area-inset-bottom));
+  transform: translateY(calc(100% + 40px));
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.pad-sheet[data-open='true'] {
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pad-sheet {
+    transition: none;
+  }
+}
+
+/* 算式行：只有在真的在算的时候才有内容，平时留着高度免得键盘跳 */
+.pad-expr {
+  min-height: 18px;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 0 8px 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 改税率时顶部换成这一条 */
+.rate-edit {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 2px 8px 4px;
+  min-height: 18px;
+}
+
+.rate-edit .re-label {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.rate-edit .re-val {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 26px;
+  font-weight: 650;
+  color: var(--tax);
+  font-variant-numeric: tabular-nums;
+}
+
+.rate-edit .re-val i {
+  font-size: 16px;
+  font-style: normal;
+  opacity: 0.7;
+  margin-left: 1px;
+}
+
+/* 小票式明细：马来西亚餐厅账单就是这么排的，点线引导 + 右对齐数字，
+   方便拿着手里那张单子逐行对。两项都按小计算，互不叠加。 */
+.receipt {
+  margin: 4px 4px 8px;
+  padding: 10px 12px;
+  background: var(--tax-wash);
+  border: 1px solid color-mix(in srgb, var(--tax) 26%, transparent);
+  border-radius: 10px;
+}
+
+.receipt .r-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.9;
+}
+
+.receipt .lead {
+  flex: 1;
+  border-bottom: 1px dotted color-mix(in srgb, var(--tax) 45%, transparent);
+  transform: translateY(-3px);
+}
+
+.receipt .num {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.receipt .r-line.total {
+  font-size: 14px;
+  font-weight: 680;
+  color: var(--text-primary);
+  margin-top: 3px;
+  padding-top: 5px;
+  border-top: 1px solid color-mix(in srgb, var(--tax) 30%, transparent);
+}
+
+.receipt .r-line.total .lead {
+  border: 0;
+}
+
+/* 税费控件：一个胶囊切成两半，左半开关，右半改税率。
+   费率不是所有店都一样，改它必须和开关一样近。 */
+.tax-row {
+  display: flex;
+  gap: 8px;
+  padding: 2px 4px 10px;
+  transition: opacity 0.15s;
+}
+
+.tax-row[data-dim='true'] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.tax-ctl {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  border: 1px solid transparent;
+  overflow: hidden;
+}
+
+.tax-ctl[data-on='true'] {
+  background: var(--tax-wash);
+  border-color: color-mix(in srgb, var(--tax) 45%, transparent);
+}
+
+.tax-toggle,
+.tax-rate {
+  padding: 9px 4px;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-secondary);
+}
+
+.tax-toggle {
+  flex: 1;
+}
+
+.tax-rate {
+  flex: none;
+  min-width: 62px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  border-left: 1px solid color-mix(in srgb, var(--text-secondary) 22%, transparent);
+}
+
+.tax-rate::after {
+  content: ' ✎';
+  font-family: var(--font);
+  opacity: 0.55;
+}
+
+.tax-ctl[data-on='true'] .tax-toggle,
+.tax-ctl[data-on='true'] .tax-rate {
+  color: var(--tax);
+}
+
+.tax-ctl[data-on='true'] .tax-rate {
+  border-left-color: color-mix(in srgb, var(--tax) 40%, transparent);
+}
+
+/* 4 列 × 5 行：运算符集中在右边一列，+ 和「完成」各占两格，
+   它们是最高频的，给大靶子 */
+.pad-keys {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: 48px;
+  gap: 7px;
+}
+
+.pad-key {
+  border-radius: 11px;
+  background: var(--plane);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.07);
+  font-size: 21px;
+  font-weight: 500;
+  color: var(--text-primary);
+  display: grid;
+  place-items: center;
+  transition: transform 0.08s, background 0.12s;
+}
+
+.pad-key:active {
+  transform: scale(0.95);
+  background: var(--surface-sunken);
+}
+
+.pad-key:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pad-key:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.pad-key:disabled:active {
+  transform: none;
+}
+
+.pad-key.op {
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  font-size: 20px;
+}
+
+/* 按下运算符后高亮，提示「在等你输右边那个数」 */
+.pad-key.op[data-armed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.pad-key.wide {
+  grid-row: span 2;
+}
+
+.pad-key.tiny {
+  font-size: 15px;
+  font-weight: 550;
+}
+
+.pad-key.done {
+  grid-row: span 2;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 15px;
+  font-weight: 620;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.pad-key.done:disabled {
+  box-shadow: none;
 }

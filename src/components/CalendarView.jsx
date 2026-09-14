@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import TransactionList from './TransactionList.jsx'
-import { dateHeading, formatMoney, monthLabel, sumBy, todayStr } from '../utils.js'
+import { dateHeading, formatMoney, homeAmountOf, monthLabel, sumBy, todayStr } from '../utils.js'
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -25,8 +25,11 @@ export default function CalendarView({ month, records, categories, accounts, cur
     for (const t of records) {
       if (!map.has(t.date)) map.set(t.date, { expense: 0, income: 0 })
       const e = map.get(t.date)
-      if (t.type === 'expense') e.expense += Number(t.amount)
-      else e.income += Number(t.amount)
+      // 日历格子里的数字是折算后的主货币，否则同一格里 RM 和 ¥ 会被直接相加
+      const v = homeAmountOf(t)
+      if (v === null) continue
+      if (t.type === 'expense') e.expense += Number(v)
+      else e.income += Number(v)
     }
 
     const out = []
@@ -113,6 +116,7 @@ export default function CalendarView({ month, records, categories, accounts, cur
               records={selectedRecords}
               categories={categories}
               accounts={accounts}
+              currency={currency}
               onEdit={onEdit}
               showDate={false}
             />

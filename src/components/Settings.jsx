@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react'
-import { CURRENCIES, csvEscape, downloadBlob } from '../utils.js'
+import { CURRENCIES, csvEscape, downloadBlob, formatAmount, symbolOf } from '../utils.js'
 import { clearAllData, exportAll, importAll } from '../db.js'
 import SyncPanel from './SyncPanel.jsx'
 
 // 改动代码时手动 +1。线上「关于」里会显示，用来确认部署的到底是哪一版。
-const APP_VERSION = 'v1.6.1'
+const APP_VERSION = 'v1.8.0'
 
 // iOS 的独立窗口模式里 <a download> 经常被吞掉，优先走系统分享面板
 async function deliverFile(content, filename, mime) {
@@ -24,6 +24,9 @@ async function deliverFile(content, filename, mime) {
 export default function Settings({
   currency,
   onCurrencyChange,
+  fx,
+  onFxChange,
+  accounts = [],
   theme,
   onThemeChange,
   lastBackup,
@@ -58,7 +61,8 @@ export default function Settings({
     setBusy(true)
     try {
       const byId = new Map(categories.map((c) => [c.id, c]))
-      const head = ['日期', '类型', '分类', '金额', '备注']
+      // 带上货币列，否则导出的表里 RM 和 ¥ 会混成一列没法用
+      const head = ['日期', '类型', '分类', '货币', '金额', `折算(${currency})`, '备注']
       const lines = [head.join(',')]
       for (const t of [...records].sort((a, b) => (a.date < b.date ? -1 : 1))) {
         lines.push(
@@ -66,7 +70,11 @@ export default function Settings({
             t.date,
             t.type === 'expense' ? '支出' : '收入',
             byId.get(t.categoryId)?.name ?? '未分类',
+            t.currency || currency,
             Number(t.amount).toFixed(2),
+            t.homeAmount === null || t.homeAmount === undefined
+              ? ''
+              : Number(t.homeAmount).toFixed(2),
             csvEscape(t.note || ''),
           ].join(',')
         )
@@ -122,7 +130,8 @@ export default function Settings({
         <div className="card">
           <div className="list-item">
             <span className="li-main">
-              <span className="li-title">货币符号</span>
+              <span className="li-title">主货币</span>
+              <span className="li-sub">总资产和所有统计都换算成它来显示</span>
             </span>
             <select
               className="input"
@@ -161,6 +170,8 @@ export default function Settings({
           </button>
         </div>
       </div>
+
+      <FxPanel currency={currency} fx={fx} accounts={accounts} onFxChange={onFxChange} />
 
       <div className="section">
         <div className="section-head">
@@ -259,6 +270,75 @@ export default function Settings({
           </p>
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * 汇率面板。只列出「你真的有账户在用」的外币——没有人民币账户就不该问你人民币汇率。
+ *
+ * 汇率是手填的固定值，不联网：这个应用离线优先，出国时网络更不可靠，
+ * 而且自动汇率会让人误以为总资产是精确的。它永远是估算。
+ */
+function FxPanel({ currency, fx, accounts, onFxChange }) {
+  // 用到的外币，按账户出现顺序去重
+  const codes = []
+  for (const a of accounts) {
+    const c = a.currency || currency
+    if (c !== currency && !codes.includes(c)) codes.push(c)
+  }
+  if (codes.length === 0) return null
+
+  const homeSym = symbolOf(currency)
+
+  return (
+    <div className="section">
+      <div className="section-head">
+        <h2>汇率</h2>
+        <span className="hint">手填估算值</span>
+      </div>
+      <div className="card">
+        {codes.map((code) => {
+          const raw = fx?.[code]
+          const val = Number.isFinite(Number(raw)) && Number(raw) > 0 ? String(raw) : ''
+          return (
+            <div className="list-item fx-item" key={code}>
+              <span className="li-main">
+                <span className="li-title">
+                  1 {symbolOf(code)} = ? {homeSym}
+                </span>
+                <span className="li-sub">
+                  {val
+                    ? `${symbolOf(code)} 100 ≈ ${homeSym} ${formatAmount(Number(val) * 100)}`
+                    : '未设置，相关账户和记录暂不计入统计'}
+                </span>
+              </span>
+              <input
+                className="input fx-input"
+                type="text"
+                inputMode="decimal"
+                placeholder="0.00"
+                aria-label={`1 ${code} 兑 ${currency}`}
+                value={val}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9.]/g, '')
+                  if (!/^\d*\.?\d{0,4}$/.test(v)) return
+                  const next = { ...(fx ?? {}), [currency]: 1 }
+                  // 空值就把这个货币从表里删掉，回到「未设置」，
+                  // 而不是留个 0 让后面的折算算出一堆 0
+                  if (v === '' || Number(v) <= 0) delete next[code]
+                  else next[code] = Number(v)
+                  onFxChange(next)
+                }}
+              />
+            </div>
+          )
+        })}
+      </div>
+      <p className="note-box" style={{ marginTop: 12 }}>
+        汇率只影响折算成{homeSym}之后的数字（总资产、统计、图表）。
+        每个账户自己的余额始终用它自己的货币算，汇率填错也不会动到任何一笔记录。
+      </p>
     </div>
   )
 }

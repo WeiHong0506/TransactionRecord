@@ -47,7 +47,7 @@ const Icon = ({ name }) => {
 
 const TABS = [
   { id: 'stats', label: '统计', icon: 'stats' },
-  { id: 'accounts', label: '账号', icon: 'wallet' },
+  { id: 'accounts', label: '资产', icon: 'wallet' },
 ]
 
 export default function TabBar({ tab, setTab, onAdd }) {
@@ -55,7 +55,7 @@ export default function TabBar({ tab, setTab, onAdd }) {
     <nav className="tabbar">
       <div className="dock">
         {TABS.map((t) => {
-          // 设置页是从账号页进去的二级页面，高亮仍留在「账号」上
+          // 设置页是从资产页进去的二级页面，高亮仍留在「资产」上
           const active = tab === t.id || (t.id === 'accounts' && tab === 'settings')
           return (
             <button

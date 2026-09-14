@@ -6,7 +6,9 @@ const DB_NAME = 'transaction-record'
 // v3：补齐 createdAt——v2 漏了它，导致上传时发送 null，撞上云端的非空约束
 // v4：引入资金账户，历史流水回填到默认账户
 // v5：补齐后来新增的默认分类（老用户的分类表是在 v1 就建好的，不会自动拿到新分类）
-const DB_VERSION = 5
+// v6：货币下沉到账户和每一笔流水。在此之前货币只是个全局显示设置，
+//     金额都是裸数字；迁移时按当时的设置值回填，否则改主货币会把历史记录的含义改掉
+const DB_VERSION = 6
 
 let dbPromise = null
 
@@ -79,6 +81,26 @@ function getDB() {
             }
             cursor = await cursor.continue()
           }
+        }
+        if (oldVersion < 6 && oldVersion >= 1) {
+          // 迁移前所有金额都是同一种货币——就是设置里那一个。按它回填，
+          // 这样之后把主货币改成人民币时，历史的马币记录仍然认得自己是马币。
+          const settings = tx.objectStore('settings')
+          const legacy = (await settings.get('currency'))?.value ?? 'MYR'
+          const now = Date.now()
+          for (const name of ['accounts', 'transactions']) {
+            const store = tx.objectStore(name)
+            let cursor = await store.openCursor()
+            while (cursor) {
+              const v = cursor.value
+              if (!v.currency) {
+                await cursor.update({ ...v, currency: legacy, updatedAt: now, dirty: 1 })
+              }
+              cursor = await cursor.continue()
+            }
+          }
+          // 主货币就是原来那个设置值，汇率表里它恒为 1
+          await settings.put({ key: 'fx', value: { [legacy]: 1 } })
         }
       },
     })
@@ -168,6 +190,8 @@ export async function saveAccount(account) {
     ...account,
     id: account.id || newId(),
     initialBalance: Math.round(Number(account.initialBalance || 0) * 100) / 100,
+    // 账户的货币一旦定下就是它所有流水的计价单位，缺省回退到主货币
+    currency: account.currency || 'MYR',
     createdAt: account.createdAt ?? now,
     updatedAt: now,
     deletedAt: account.deletedAt ?? null,
@@ -198,6 +222,9 @@ export async function saveTransaction(record) {
     amount: Math.round(Number(record.amount) * 100) / 100,
     note: record.note ?? '',
     accountId: record.accountId ?? DEFAULT_ACCOUNTS[0].id,
+    // 抄一份账户的货币存下来，而不是每次回查账户：
+    // 这样以后账户改名换币，历史记录仍然记得自己当初是用什么钱付的
+    currency: record.currency || 'MYR',
     createdAt: record.createdAt ?? now,
     updatedAt: now,
     deletedAt: record.deletedAt ?? null,

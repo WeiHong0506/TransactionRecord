@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { symbolOf, todayStr } from '../utils.js'
+import { formatAmount, symbolOf, todayStr } from '../utils.js'
+import AmountPad from './AmountPad.jsx'
 
 /**
  * 记一笔 / 编辑记录——整页表单，不是弹层。
@@ -14,13 +15,19 @@ export default function TransactionPage({
   currency,
   initial,
   defaultAccountId,
+  taxRates,
+  onTaxRatesChange,
   onSave,
   onDelete,
   onClose,
 }) {
   const editing = Boolean(initial?.id)
   const [type, setType] = useState(initial?.type ?? 'expense')
-  const [amount, setAmount] = useState(initial ? String(initial.amount) : '')
+  const [amount, setAmount] = useState(initial ? Number(initial.amount) : null)
+  const [taxMarks, setTaxMarks] = useState([])
+  // 新记一笔时直接把键盘唤起来——你点加号进来就是为了输金额；
+  // 编辑已有记录时不弹，免得挡住要改的其他字段
+  const [padOpen, setPadOpen] = useState(!initial?.id)
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '')
   const [accountId, setAccountId] = useState(
     initial?.accountId ?? defaultAccountId ?? accounts[0]?.id ?? ''
@@ -33,8 +40,28 @@ export default function TransactionPage({
   closeRef.current = onClose
 
   useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    /**
+     * iOS Safari 上光靠 body{overflow:hidden} 锁不住背景——手指落在输入框上、
+     * 或者键盘弹起来把视口压矮之后，底下那一页照样能滑。唯一可靠的办法是
+     * 把 body 整个 position:fixed 钉住，并记下当前滚动位置，关闭时再滚回去。
+     */
+    const scrollY = window.scrollY
+    const prev = {
+      position: document.body.style.position,
+      top: document.body.style.top,
+      left: document.body.style.left,
+      right: document.body.style.right,
+      width: document.body.style.width,
+      overflow: document.body.style.overflow,
+    }
+    Object.assign(document.body.style, {
+      position: 'fixed',
+      top: `-${scrollY}px`,
+      left: '0',
+      right: '0',
+      width: '100%',
+      overflow: 'hidden',
+    })
 
     // 压一条历史记录：安卓返回键和 iOS 侧滑就是「关掉这一页」，而不是退出整个应用
     let popped = false
@@ -48,7 +75,9 @@ export default function TransactionPage({
     window.addEventListener('keydown', onKey)
 
     return () => {
-      document.body.style.overflow = prev
+      Object.assign(document.body.style, prev)
+      // 解锁后浏览器会把页面弹回顶部，手动滚回原位，否则关掉表单就找不到刚才看到哪了
+      window.scrollTo(0, scrollY)
       window.removeEventListener('popstate', onPop)
       window.removeEventListener('keydown', onKey)
       // 保存成功之类的原因直接卸载时，把刚才压进去的那条历史记录清掉，
@@ -56,6 +85,11 @@ export default function TransactionPage({
       if (!popped) window.history.back()
     }
   }, [])
+
+  // 金额的计价单位跟着所选账户走，不是主货币——在中国用支付宝付的 45 块是
+  // ¥45，不是 RM45。折算留到统计时再做。
+  const account = accounts.find((a) => a.id === accountId)
+  const payCurrency = account?.currency || currency
 
   const options = useMemo(() => categories.filter((c) => c.type === type), [categories, type])
 
@@ -65,8 +99,7 @@ export default function TransactionPage({
     }
   }, [options, categoryId])
 
-  const value = Number(amount)
-  const valid = amount !== '' && !Number.isNaN(value) && value > 0 && categoryId && accountId
+  const valid = amount !== null && Number.isFinite(amount) && amount > 0 && categoryId && accountId
 
   function submit(e) {
     e.preventDefault()
@@ -74,9 +107,10 @@ export default function TransactionPage({
     onSave({
       ...(initial ?? {}),
       type,
-      amount: value,
+      amount,
       categoryId,
       accountId,
+      currency: payCurrency,
       date,
       note: note.trim(),
     })
@@ -113,25 +147,22 @@ export default function TransactionPage({
             </button>
           </div>
 
-          <div className="amount-field">
-            <span className="sym">{symbolOf(currency)}</span>
-            <label className="sr-only" htmlFor="amt">
-              金额
-            </label>
-            <input
-              id="amt"
-              type="text"
-              inputMode="decimal"
-              placeholder="0.00"
-              autoComplete="off"
-              value={amount}
-              onChange={(e) => {
-                const v = e.target.value.replace(/[^0-9.]/g, '')
-                if (/^\d*\.?\d{0,2}$/.test(v)) setAmount(v)
-              }}
-              autoFocus={!editing}
-            />
-          </div>
+          <button
+            type="button"
+            id="amt"
+            className="amount-field"
+            data-active={padOpen ? 'true' : 'false'}
+            onClick={() => setPadOpen((v) => !v)}
+            aria-label={`金额 ${amount === null ? '未填' : formatAmount(amount)}，点击输入`}
+          >
+            <span className="sym">{symbolOf(payCurrency)}</span>
+            <span className="amt-val" data-empty={amount === null ? 'true' : 'false'} aria-live="polite">
+              {amount === null ? '0.00' : formatAmount(amount)}
+            </span>
+            {/* 保存之前这个标记一直挂着，解释金额为什么不等于你打进去的那个数。
+                落账只存最终金额，所以它不会出现在已保存的记录上。 */}
+            {taxMarks.length > 0 && <span className="tax-mark">含 {taxMarks.join(' · ')}</span>}
+          </button>
 
           <div className="field">
             <span className="field-label">分类</span>
@@ -165,6 +196,9 @@ export default function TransactionPage({
                   >
                     <span className="e">{a.icon}</span>
                     {a.name}
+                    {(a.currency || currency) !== currency && (
+                      <span className="cur-tag">{a.currency}</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -214,6 +248,19 @@ export default function TransactionPage({
             {editing ? '保存修改' : '保存'}
           </button>
         </div>
+
+        <AmountPad
+          open={padOpen}
+          currency={payCurrency}
+          initialAmount={initial?.amount}
+          rates={taxRates}
+          onRatesChange={onTaxRatesChange}
+          onValue={(total, marks) => {
+            setAmount(total)
+            setTaxMarks(marks)
+          }}
+          onClose={() => setPadOpen(false)}
+        />
       </form>
     </div>
   )

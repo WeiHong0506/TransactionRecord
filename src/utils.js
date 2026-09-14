@@ -27,6 +27,43 @@ export function formatMoney(value, currency) {
   return `${symbolOf(currency)} ${formatAmount(value)}`
 }
 
+/* ---------------- 汇率 ---------------- */
+/**
+ * 汇率的含义全程统一为「1 单位该货币 = N 单位主货币」，主货币自己恒等于 1。
+ * 这样折算永远是一次乘法，不用在代码里记方向，也不会出现除以零。
+ *
+ * 汇率是用户手填的估算值，不联网。它只影响「折算成主货币之后」的数字，
+ * 每个账户自己的余额始终用它自己的货币算，永远和手机里的真实余额对得上。
+ */
+export const DEFAULT_FX = { MYR: 1 }
+
+// 返回 null 表示这个货币还没设汇率——调用方要把它当作「算不出来」，
+// 而不是偷偷按 1:1 处理，否则会凭空捏造一个看起来很正常的错数。
+export function rateOf(fx, code, home) {
+  if (!code || code === home) return 1
+  const r = Number(fx?.[code])
+  return Number.isFinite(r) && r > 0 ? r : null
+}
+
+export function toHome(amount, code, fx, home) {
+  const r = rateOf(fx, code, home)
+  return r === null ? null : Number(amount) * r
+}
+
+// 换主货币时把所有汇率按新主货币重新归一，货币之间的相对关系保持不变。
+// 例如 1CNY=0.6MYR、主货币从 MYR 换成 CNY 之后，应该变成 1MYR≈1.667CNY。
+export function renormalizeFx(fx, newHome) {
+  const base = Number(fx?.[newHome])
+  if (!Number.isFinite(base) || base <= 0) return { ...(fx ?? {}), [newHome]: 1 }
+  const out = {}
+  for (const [code, r] of Object.entries(fx ?? {})) {
+    const v = Number(r)
+    if (Number.isFinite(v) && v > 0) out[code] = v / base
+  }
+  out[newHome] = 1
+  return out
+}
+
 /* ---------------- 日期 ---------------- */
 
 // offsetDays 为负就是往前推，用 setDate 让跨月跨年自动正确
@@ -82,8 +119,19 @@ export function dateHeading(dateStr) {
 
 /* ---------------- 汇总 ---------------- */
 
+/**
+ * 统计一律用折算成主货币后的 homeAmount，因为「RM 800 + ¥2400」这个和没有意义。
+ * homeAmount 由 App 在加载时算好挂上去；为 null 表示该货币还没设汇率，
+ * 这种记录直接跳过，界面上另有提示，而不是按原值混进来把总数搞错。
+ */
+export const homeAmountOf = (t) => (t.homeAmount === undefined ? Number(t.amount) : t.homeAmount)
+
 export function sumBy(list, type) {
-  return list.reduce((acc, t) => (t.type === type ? acc + Number(t.amount) : acc), 0)
+  return list.reduce((acc, t) => {
+    if (t.type !== type) return acc
+    const v = homeAmountOf(t)
+    return v === null ? acc : acc + Number(v)
+  }, 0)
 }
 
 export function groupByDate(list) {
@@ -101,8 +149,10 @@ export function groupByCategory(list, categories, type, maxSlices = 7) {
   const map = new Map()
   for (const t of list) {
     if (t.type !== type) continue
+    const v = homeAmountOf(t)
+    if (v === null) continue
     const key = t.categoryId
-    map.set(key, (map.get(key) ?? 0) + Number(t.amount))
+    map.set(key, (map.get(key) ?? 0) + Number(v))
   }
   const rows = [...map.entries()]
     .map(([id, value]) => {

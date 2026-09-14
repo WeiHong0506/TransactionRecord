@@ -6,6 +6,7 @@ import TransactionList from './TransactionList.jsx'
 import ListFilter, { EMPTY_FILTER, applyFilter, isFiltered } from './ListFilter.jsx'
 import {
   formatAmount,
+  homeAmountOf,
   formatMoney,
   groupByCategory,
   monthLabel,
@@ -20,6 +21,8 @@ export default function Stats({
   categories,
   accounts,
   currency,
+  missingRates = [],
+  onOpenSettings,
   onEdit,
 }) {
   const [view, setView] = useState('list') // list | calendar | breakdown
@@ -46,10 +49,17 @@ export default function Stats({
   const expenseTotal = sumBy(monthRecords, 'expense')
   const avg = dayCount ? expenseTotal / dayCount : 0
 
+  const rateWarning = missingRates.length > 0 && (
+    <button className="note-box warn" onClick={onOpenSettings}>
+      有 {missingRates.join('、')} 的记录还没设汇率，暂时不计入统计。点这里去设置 ›
+    </button>
+  )
+
   if (view === 'list') {
     return (
       <div>
         <ViewTabs view={view} setView={setView} />
+        {rateWarning}
         <div className="section">
           <div className="section-head">
             <h2>收支明细</h2>
@@ -73,6 +83,7 @@ export default function Stats({
               records={filtered}
               categories={categories}
               accounts={accounts}
+              currency={currency}
               onEdit={onEdit}
             />
           )}
@@ -85,6 +96,7 @@ export default function Stats({
     return (
       <div>
         <ViewTabs view={view} setView={setView} />
+        {rateWarning}
         <CalendarView
           month={month}
           records={monthRecords}
@@ -100,6 +112,7 @@ export default function Stats({
   return (
     <div>
       <ViewTabs view={view} setView={setView} />
+      {rateWarning}
 
       <div className="section">
         <div className="section-head">
@@ -180,7 +193,9 @@ export default function Stats({
                 monthRecords.some((t) => t.type === 'expense')
                   ? formatMoney(
                       Math.max(
-                        ...monthRecords.filter((t) => t.type === 'expense').map((t) => t.amount)
+                        ...monthRecords
+                          .filter((t) => t.type === 'expense' && homeAmountOf(t) !== null)
+                          .map((t) => homeAmountOf(t))
                       ),
                       currency
                     )

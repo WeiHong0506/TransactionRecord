@@ -14,7 +14,17 @@ import {
   saveTransaction,
   setSetting,
 } from './db.js'
-import { currentMonth, formatAmount, monthLabel, shiftMonth, symbolOf, sumBy } from './utils.js'
+import {
+  DEFAULT_FX,
+  currentMonth,
+  formatAmount,
+  monthLabel,
+  rateOf,
+  renormalizeFx,
+  shiftMonth,
+  symbolOf,
+  sumBy,
+} from './utils.js'
 import TransactionPage from './components/TransactionPage.jsx'
 import CategoryManager from './components/CategoryManager.jsx'
 import Stats from './components/Stats.jsx'
@@ -26,13 +36,17 @@ import { useSync } from './useSync.js'
 
 export default function App() {
   const [ready, setReady] = useState(false)
-  // stats | accounts | settings（settings 不在底部导航里，从账号页右上角进）
+  // stats | accounts | settings（settings 不在底部导航里，从资产页右上角进）
   const [tab, setTab] = useState('stats')
   const [month, setMonth] = useState(currentMonth())
   const [records, setRecords] = useState([])
   const [categories, setCategories] = useState([])
   const [accounts, setAccounts] = useState([])
+  // currency 现在的含义是「主货币」：所有折算后的数字都用它表示
   const [currency, setCurrency] = useState('MYR')
+  const [fx, setFx] = useState(DEFAULT_FX)
+  // 税率是配置（记住），开关是这一笔的选择（每次归零）
+  const [taxRates, setTaxRates] = useState({ sc: 10, sst: 6 })
   const [theme, setTheme] = useState('system')
   const [editing, setEditing] = useState(null)
   const [showCategories, setShowCategories] = useState(false)
@@ -54,12 +68,16 @@ export default function App() {
     ;(async () => {
       await initCategories()
       await initAccounts()
-      const [cur, th, lastAcc] = await Promise.all([
+      const [cur, th, lastAcc, rates, tax] = await Promise.all([
         getSetting('currency', 'MYR'),
         getSetting('theme', 'system'),
         getSetting('lastAccountId', null),
+        getSetting('fx', null),
+        getSetting('taxRates', null),
       ])
+      if (tax) setTaxRates(tax)
       setCurrency(cur)
+      setFx(rates ?? { [cur]: 1 })
       setTheme(th)
       setLastAccountId(lastAcc)
       setLastBackup(localStorage.getItem('lastBackup'))
@@ -79,7 +97,32 @@ export default function App() {
     setTimeout(() => setToastMsg(null), 2400)
   }, [])
 
-  const monthRecords = useMemo(() => records.filter((t) => t.month === month), [records, month])
+  /**
+   * 折算只在这里做一次，给每条记录挂上 homeAmount，下游所有统计、图表、
+   * 日历都只认它。好处是货币逻辑集中在一处，不用把汇率透传进每个组件，
+   * 也不会出现某个图表忘了折算、悄悄把 ¥ 当 RM 加进去。
+   *
+   * homeAmount 为 null 表示这笔的货币还没设汇率——统计会跳过它，
+   * 界面另有提示。宁可少算并说出来，也不要按 1:1 编一个看起来正常的数。
+   */
+  const priced = useMemo(() => {
+    const accCur = new Map(accounts.map((a) => [a.id, a.currency || currency]))
+    return records.map((t) => {
+      const code = t.currency || accCur.get(t.accountId) || currency
+      const r = rateOf(fx, code, currency)
+      return { ...t, currency: code, homeAmount: r === null ? null : Number(t.amount) * r }
+    })
+  }, [records, accounts, fx, currency])
+
+  // 有流水或有账户、但还没填汇率的货币。填了才算得出总资产和统计。
+  const missingRates = useMemo(() => {
+    const codes = new Set()
+    for (const a of accounts) if (rateOf(fx, a.currency || currency, currency) === null) codes.add(a.currency)
+    for (const t of priced) if (t.homeAmount === null) codes.add(t.currency)
+    return [...codes].filter(Boolean)
+  }, [accounts, priced, fx, currency])
+
+  const monthRecords = useMemo(() => priced.filter((t) => t.month === month), [priced, month])
   const expense = sumBy(monthRecords, 'expense')
   const income = sumBy(monthRecords, 'income')
   const balance = income - expense
@@ -170,10 +213,12 @@ export default function App() {
           <Stats
             month={month}
             monthRecords={monthRecords}
-            allRecords={records}
+            allRecords={priced}
             categories={categories}
             accounts={accounts}
             currency={currency}
+            missingRates={missingRates}
+            onOpenSettings={() => setTab('settings')}
             onEdit={(t) => setEditing(t)}
           />
         </>
@@ -182,15 +227,18 @@ export default function App() {
       {tab === 'accounts' && (
         <>
           <header className="topbar">
-            <h1 className="page-title">账号管理</h1>
+            <h1 className="page-title">资产</h1>
             <button className="icon-btn" onClick={() => setTab('settings')} aria-label="设置">
               ⚙️
             </button>
           </header>
           <AccountsPage
             accounts={accounts}
-            records={records}
+            records={priced}
             currency={currency}
+            fx={fx}
+            missingRates={missingRates}
+            onOpenSettings={() => setTab('settings')}
             onSave={async (a) => {
               await saveAccount(a)
               await reload()
@@ -221,8 +269,19 @@ export default function App() {
           <Settings
             currency={currency}
             onCurrencyChange={async (c) => {
+              // 换主货币时把汇率表按新主货币重新归一，
+              // 否则旧汇率会被当成「兑新主货币」，所有折算数字一夜之间全错
+              const next = renormalizeFx(fx, c)
               setCurrency(c)
+              setFx(next)
               await setSetting('currency', c)
+              await setSetting('fx', next)
+            }}
+            fx={fx}
+            accounts={accounts}
+            onFxChange={async (next) => {
+              setFx(next)
+              await setSetting('fx', next)
             }}
             theme={theme}
             onThemeChange={async (t) => {
@@ -237,7 +296,7 @@ export default function App() {
               await reload()
             }}
             toast={toast}
-            records={records}
+            records={priced}
             categories={categories}
             sync={sync}
           />
@@ -253,6 +312,11 @@ export default function App() {
           currency={currency}
           initial={editing.id ? editing : null}
           defaultAccountId={lastAccountId}
+          taxRates={taxRates}
+          onTaxRatesChange={async (next) => {
+            setTaxRates(next)
+            await setSetting('taxRates', next)
+          }}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditing(null)}

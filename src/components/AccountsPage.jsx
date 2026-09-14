@@ -2,14 +2,22 @@ import { useMemo, useState } from 'react'
 import Sheet from './Sheet.jsx'
 import { ACCOUNT_ICON_CHOICES, SERIES_SLOTS } from '../categories.js'
 import { newId } from '../db.js'
-import { currentMonth, formatAmount, formatMoney, symbolOf } from '../utils.js'
+import { CURRENCIES, currentMonth, formatAmount, formatMoney, rateOf, symbolOf } from '../utils.js'
 
 /**
- * 账户余额 = 期初余额 + 所有收入 − 所有支出。
+ * 账户余额 = 期初余额 + 所有收入 − 所有支出，全部用账户自己的货币算。
  * 用全部流水算，不受顶部月份切换影响——余额是个时点值，不是区间值。
+ *
+ * 关键在于余额绝不折算：人民币账户的余额永远是人民币，和支付宝里显示的
+ * 数字一分不差。折算只发生在最后汇总成总资产的那一步。
  */
-function computeBalances(accounts, records) {
-  const map = new Map(accounts.map((a) => [a.id, { ...a, balance: a.initialBalance ?? 0, monthExpense: 0, count: 0 }]))
+function computeBalances(accounts, records, fx, home) {
+  const map = new Map(
+    accounts.map((a) => [
+      a.id,
+      { ...a, currency: a.currency || home, balance: Number(a.initialBalance ?? 0), monthExpense: 0, count: 0 },
+    ])
+  )
   const thisMonth = currentMonth()
   for (const t of records) {
     const row = map.get(t.accountId)
@@ -19,14 +27,33 @@ function computeBalances(accounts, records) {
     row.count++
     if (t.month === thisMonth && t.type === 'expense') row.monthExpense += amt
   }
+  for (const row of map.values()) {
+    const r = rateOf(fx, row.currency, home)
+    row.rate = r
+    row.homeBalance = r === null ? null : row.balance * r
+  }
   return [...map.values()]
 }
 
-export default function AccountsPage({ accounts, records, currency, onSave, onDelete }) {
+export default function AccountsPage({
+  accounts,
+  records,
+  currency,
+  fx,
+  missingRates = [],
+  onOpenSettings,
+  onSave,
+  onDelete,
+}) {
   const [editing, setEditing] = useState(null)
 
-  const rows = useMemo(() => computeBalances(accounts, records), [accounts, records])
-  const total = rows.reduce((a, r) => a + r.balance, 0)
+  const rows = useMemo(
+    () => computeBalances(accounts, records, fx, currency),
+    [accounts, records, fx, currency]
+  )
+  // 汇率缺失的账户算不进总资产——下面有提示，不会悄悄少算
+  const total = rows.reduce((a, r) => a + (r.homeBalance ?? 0), 0)
+  const hasForeign = rows.some((r) => r.currency !== currency)
   // 归属到已删除账户的流水，避免它们在总资产里凭空消失
   const orphan = records.filter((t) => !accounts.some((a) => a.id === t.accountId)).length
 
@@ -62,7 +89,18 @@ export default function AccountsPage({ accounts, records, currency, onSave, onDe
             <div className="v">{records.length}</div>
           </div>
         </div>
+        {hasForeign && (
+          <p className="fx-note">
+            {`外币账户按你设定的汇率折算成${symbolOf(currency)}，是估算值；各账户自己的余额不受影响。`}
+          </p>
+        )}
       </section>
+
+      {missingRates.length > 0 && (
+        <button className="note-box warn" onClick={onOpenSettings}>
+          {`还没设置 ${missingRates.join('、')} 的汇率，这些账户暂时没算进总资产，相关记录也不计入统计。点这里去设置 ›`}
+        </button>
+      )}
 
       <div className="section">
         <div className="section-head">
@@ -77,15 +115,28 @@ export default function AccountsPage({ accounts, records, currency, onSave, onDe
                 {a.icon}
               </span>
               <span className="body">
-                <span className="name">{a.name}</span>
+                <span className="name">
+                  {a.name}
+                  {a.currency !== currency && <span className="cur-tag">{a.currency}</span>}
+                </span>
                 <span className="sub">
                   {a.count} 笔
-                  {a.monthExpense > 0 && ` · 本月支出 ${formatAmount(a.monthExpense)}`}
+                  {a.monthExpense > 0 &&
+                    ` · 本月支出 ${symbolOf(a.currency)} ${formatAmount(a.monthExpense)}`}
                 </span>
               </span>
-              <span className={`bal ${a.balance < 0 ? 'neg' : ''}`}>
-                {a.balance < 0 && '-'}
-                {formatAmount(a.balance)}
+              <span className="bal-col">
+                <span className={`bal ${a.balance < 0 ? 'neg' : ''}`}>
+                  {a.balance < 0 && '-'}
+                  {symbolOf(a.currency)} {formatAmount(a.balance)}
+                </span>
+                {a.currency !== currency && (
+                  <span className="bal-sub">
+                    {a.homeBalance === null
+                      ? '未设汇率'
+                      : `≈ ${formatMoney(a.homeBalance, currency)}`}
+                  </span>
+                )}
               </span>
             </button>
           ))}
@@ -107,6 +158,7 @@ export default function AccountsPage({ accounts, records, currency, onSave, onDe
         <AccountSheet
           account={editing}
           currency={currency}
+          usedCount={rows.find((r) => r.id === editing.id)?.count ?? 0}
           canDelete={accounts.length > 1}
           onSave={(a) => {
             const { isNew, balance, monthExpense, count, ...rest } = a
@@ -124,8 +176,12 @@ export default function AccountsPage({ accounts, records, currency, onSave, onDe
   )
 }
 
-function AccountSheet({ account, currency, canDelete, onSave, onDelete, onClose }) {
-  const [draft, setDraft] = useState(account)
+function AccountSheet({ account, currency, usedCount = 0, canDelete, onSave, onDelete, onClose }) {
+  const [draft, setDraft] = useState({ ...account, currency: account.currency || currency })
+  // 已经有流水的账户不让改货币：改了等于把历史金额的含义整体改掉
+  // （RM 38.50 的午饭一键变成 ¥38.50），而且无法还原。
+  const currencyLocked = !account.isNew && usedCount > 0
+  const cur = draft.currency || currency
 
   return (
     <Sheet onClose={onClose}>
@@ -158,9 +214,33 @@ function AccountSheet({ account, currency, canDelete, onSave, onDelete, onClose 
       </div>
 
       <div className="field">
+        <label htmlFor="acc-cur">货币</label>
+        <select
+          id="acc-cur"
+          className="input"
+          value={cur}
+          disabled={currencyLocked}
+          onChange={(e) => setDraft({ ...draft, currency: e.target.value })}
+        >
+          {CURRENCIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        <p className="cal-hint" style={{ textAlign: 'left', marginTop: 6 }}>
+          {currencyLocked
+            ? `已有 ${usedCount} 笔记录，货币不能再改——改了会把这些记录的金额含义整体改掉。需要换币请新建一个账户。`
+            : cur === currency
+              ? '这个账户里的钱是什么货币。和主货币一致，不需要折算。'
+              : `这个账户的余额和记录都用${symbolOf(cur)}计价，汇总进总资产时才按汇率折成${symbolOf(currency)}。`}
+        </p>
+      </div>
+
+      <div className="field">
         <label htmlFor="acc-init">期初余额</label>
         <div className="amount-field" style={{ padding: '10px 14px' }}>
-          <span className="sym">{symbolOf(currency)}</span>
+          <span className="sym">{symbolOf(cur)}</span>
           <input
             id="acc-init"
             type="text"

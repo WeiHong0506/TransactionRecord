@@ -29,6 +29,7 @@ const check = (name, cond, detail = '') => {
 const browser = await chromium.launch(
   process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}
 )
+
 const ctx = await browser.newContext({
   viewport: { width: 414, height: 896 },
   deviceScaleFactor: 2,
@@ -43,7 +44,7 @@ await page.goto(BASE, { waitUntil: 'networkidle' })
 await page.waitForSelector('.summary')
 
 async function openImport() {
-  await page.click('.dock-tab:has-text("账号")')
+  await page.click('.dock-tab:has-text("资产")')
   await page.click('.icon-btn[aria-label="设置"]')
   await page.click('.list-item:has-text("导入对账单")')
   await page.waitForSelector('.sheet')

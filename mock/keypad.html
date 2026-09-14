@@ -1,0 +1,951 @@
+<title>记账键盘草案</title>
+<style>
+  /* 配色直接沿用 src/styles.css 里的设计令牌，不另起一套——
+     这是一份给现有应用看的草案，配色一旦漂移就失去了参考价值。 */
+  :root {
+    color-scheme: light;
+    --plane: #f9f9f7;
+    --surface: #fcfcfb;
+    --sunken: #f1f0ec;
+    --raised: #ffffff;
+    --text: #0b0b0b;
+    --text2: #52514e;
+    --muted: #898781;
+    --border: rgba(11, 11, 11, 0.1);
+    --hair: rgba(11, 11, 11, 0.06);
+    --accent: #2a78d6;
+    --accent-ink: #ffffff;
+    --accent-wash: color-mix(in srgb, #2a78d6 10%, #fcfcfb);
+    --expense: #e34948;
+    --tax: #b4600f;
+    --tax-wash: color-mix(in srgb, #b4600f 12%, #fcfcfb);
+    --shadow: 0 1px 2px rgba(11, 11, 11, 0.06), 0 8px 24px rgba(11, 11, 11, 0.05);
+    --lift: 0 -1px 0 rgba(11, 11, 11, 0.06), 0 -10px 30px rgba(11, 11, 11, 0.07);
+    --font: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      color-scheme: dark;
+      --plane: #0d0d0d;
+      --surface: #1a1a19;
+      --sunken: #242422;
+      --raised: #222221;
+      --text: #ffffff;
+      --text2: #c3c2b7;
+      --muted: #898781;
+      --border: rgba(255, 255, 255, 0.1);
+      --hair: rgba(255, 255, 255, 0.07);
+      --accent: #3987e5;
+      --accent-wash: color-mix(in srgb, #3987e5 18%, #1a1a19);
+      --expense: #e66767;
+      --tax: #e0a760;
+      --tax-wash: color-mix(in srgb, #e0a760 16%, #1a1a19);
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+      --lift: 0 -1px 0 rgba(255, 255, 255, 0.06), 0 -10px 30px rgba(0, 0, 0, 0.45);
+    }
+  }
+
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --plane: #0d0d0d;
+    --surface: #1a1a19;
+    --sunken: #242422;
+    --raised: #222221;
+    --text: #ffffff;
+    --text2: #c3c2b7;
+    --muted: #898781;
+    --border: rgba(255, 255, 255, 0.1);
+    --hair: rgba(255, 255, 255, 0.07);
+    --accent: #3987e5;
+    --accent-wash: color-mix(in srgb, #3987e5 18%, #1a1a19);
+    --expense: #e66767;
+    --tax: #e0a760;
+    --tax-wash: color-mix(in srgb, #e0a760 16%, #1a1a19);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+    --lift: 0 -1px 0 rgba(255, 255, 255, 0.06), 0 -10px 30px rgba(0, 0, 0, 0.45);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--plane);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.6;
+    padding: 32px 20px 64px;
+  }
+
+  .wrap { max-width: 1040px; margin: 0 auto; }
+
+  /* ---------- 文档外壳 ---------- */
+  .doc-head { max-width: 60ch; margin-bottom: 32px; }
+
+  .eyebrow {
+    font-size: 11.5px;
+    font-weight: 650;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin: 0 0 8px;
+  }
+
+  h1 {
+    font-size: clamp(24px, 5vw, 31px);
+    font-weight: 680;
+    letter-spacing: -0.022em;
+    line-height: 1.2;
+    text-wrap: balance;
+    margin: 0 0 12px;
+  }
+
+  .lede { margin: 0; color: var(--text2); font-size: 15.5px; }
+
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 390px) minmax(0, 1fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  @media (max-width: 860px) {
+    .cols { grid-template-columns: minmax(0, 1fr); gap: 32px; justify-items: center; }
+    .notes { max-width: 60ch; }
+  }
+
+  /* ---------- 手机框 ---------- */
+  .phone {
+    width: 100%;
+    max-width: 390px;
+    height: 780px;
+    position: relative;
+    overflow: hidden;
+    background: var(--plane);
+    border: 1px solid var(--border);
+    border-radius: 26px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .bar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 12px 10px;
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .bar .back { width: 34px; height: 34px; display: grid; place-items: center; color: var(--text2); font-size: 19px; }
+  .bar h2 { flex: 1; margin: 0; text-align: center; font-size: 16px; font-weight: 620; }
+  .bar .pad { width: 34px; }
+
+  .form {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 14px 16px 20px;
+  }
+
+  .seg {
+    display: flex;
+    gap: 4px;
+    background: var(--sunken);
+    border-radius: 11px;
+    padding: 3px;
+    margin-bottom: 14px;
+  }
+
+  .seg button {
+    flex: 1;
+    border: 0;
+    background: none;
+    font: inherit;
+    padding: 8px 0;
+    border-radius: 9px;
+    font-size: 14px;
+    font-weight: 550;
+    color: var(--text2);
+    cursor: pointer;
+  }
+
+  .seg button[aria-pressed='true'] {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  /* 金额栏：点它才唤起键盘，所以它必须看起来可点 */
+  .amount {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 12px 16px;
+    cursor: pointer;
+    font: inherit;
+    color: var(--text);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .amount[data-active='true'] {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-wash);
+  }
+
+  .amount .sym { font-size: 18px; font-weight: 550; color: var(--text2); }
+
+  .amount .val {
+    flex: 1;
+    font-size: 30px;
+    font-weight: 640;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .amount .val[data-empty='true'] { color: var(--muted); }
+
+  /* 税费徽记：保存之前一直挂着，解释金额为什么不等于你打进去的那个数 */
+  .tax-mark {
+    font-size: 10.5px;
+    font-weight: 650;
+    color: var(--tax);
+    background: var(--tax-wash);
+    border: 1px solid color-mix(in srgb, var(--tax) 32%, transparent);
+    padding: 2px 7px;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+
+  .caret {
+    display: inline-block;
+    width: 2px;
+    height: 28px;
+    background: var(--accent);
+    vertical-align: -5px;
+    margin-left: 1px;
+    animation: blink 1.1s steps(1, end) infinite;
+  }
+
+  @keyframes blink { 50% { opacity: 0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .caret { animation: none; }
+    .pad-sheet { transition: none !important; }
+  }
+
+  .field { margin-top: 14px; }
+  .field-label { display: block; font-size: 12.5px; color: var(--text2); margin-bottom: 6px; padding-left: 2px; }
+
+  .cat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+
+  .chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 2px 8px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font: inherit;
+    font-size: 11.5px;
+    color: var(--text2);
+    cursor: pointer;
+  }
+
+  .chip .e { font-size: 19px; }
+  .chip[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
+
+  .ghost-note {
+    margin-top: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 13px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .reset-btn {
+    margin-top: 10px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 10px 13px;
+    border-radius: 10px;
+    background: none;
+    border: 1px dashed var(--border);
+    font: inherit;
+    font-size: 13px;
+    color: var(--text2);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .reset-btn span { font-size: 11.5px; color: var(--muted); }
+
+  /* ---------- 键盘 ---------- */
+  .pad-sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--raised);
+    border-top: 1px solid var(--border);
+    border-radius: 18px 18px 0 0;
+    box-shadow: var(--lift);
+    padding: 10px 10px 14px;
+    transform: translateY(calc(100% + 40px));
+    transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .pad-sheet[data-open='true'] { transform: translateY(0); }
+
+  /* 算式行：只有在按了运算符之后才出现，平时不占视线 */
+  .expr {
+    min-height: 18px;
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    padding: 0 8px 2px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 小票式明细：马来西亚餐厅账单就是这么排的，
+     点线引导 + 右对齐数字，方便和手里那张单子逐行对 */
+  .receipt {
+    display: none;
+    margin: 4px 4px 8px;
+    padding: 10px 12px;
+    background: var(--tax-wash);
+    border: 1px solid color-mix(in srgb, var(--tax) 26%, transparent);
+    border-radius: 10px;
+  }
+
+  .receipt[data-show='true'] { display: block; }
+
+  .r-line {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--text2);
+    line-height: 1.9;
+  }
+
+  .r-line .lead {
+    flex: 1;
+    border-bottom: 1px dotted color-mix(in srgb, var(--tax) 45%, transparent);
+    transform: translateY(-3px);
+  }
+
+  .r-line .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .r-line.total {
+    font-size: 14px;
+    font-weight: 680;
+    color: var(--text);
+    margin-top: 3px;
+    padding-top: 5px;
+    border-top: 1px solid color-mix(in srgb, var(--tax) 30%, transparent);
+  }
+
+  .r-line.total .lead { border: 0; }
+
+  .tax-row { display: flex; gap: 8px; padding: 2px 4px 10px; }
+
+  /* 一个胶囊切成两半：左半开关，右半改税率。
+     税率不是所有店都一样，改它必须和开关一样近。 */
+  .tax-ctl {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    border-radius: 10px;
+    background: var(--sunken);
+    border: 1px solid transparent;
+    overflow: hidden;
+  }
+
+  .tax-ctl[data-on='true'] {
+    background: var(--tax-wash);
+    border-color: color-mix(in srgb, var(--tax) 45%, transparent);
+  }
+
+  .tax-toggle,
+  .tax-rate {
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--text2);
+    cursor: pointer;
+    padding: 9px 4px;
+    font-size: 13px;
+    font-weight: 550;
+  }
+
+  .tax-toggle { flex: 1; }
+
+  .tax-rate {
+    flex: none;
+    min-width: 62px;
+    font-family: var(--mono);
+    font-size: 12px;
+    border-left: 1px solid color-mix(in srgb, var(--text2) 22%, transparent);
+    opacity: 0.9;
+  }
+
+  .tax-rate::after { content: ' ✎'; font-family: var(--font); opacity: 0.55; }
+
+  .tax-ctl[data-on='true'] .tax-toggle,
+  .tax-ctl[data-on='true'] .tax-rate { color: var(--tax); }
+
+  .tax-ctl[data-on='true'] .tax-rate { border-left-color: color-mix(in srgb, var(--tax) 40%, transparent); }
+
+  .tax-toggle:focus-visible,
+  .tax-rate:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  /* 改税率时，键盘顶部换成这一条 */
+  .rate-edit {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 2px 8px 6px;
+  }
+
+  .rate-edit .re-label { font-size: 12.5px; color: var(--text2); flex: 1; }
+
+  .rate-edit .re-val {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 650;
+    color: var(--tax);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rate-edit .re-val i { font-size: 16px; font-style: normal; opacity: 0.7; margin-left: 1px; }
+
+  .k:disabled { opacity: 0.35; cursor: default; }
+  .k:disabled:active { transform: none; }
+
+  .keys {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-auto-rows: 48px;
+    gap: 7px;
+  }
+
+  .k {
+    border: 0;
+    border-radius: 11px;
+    background: var(--surface);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.07);
+    font: inherit;
+    font-size: 21px;
+    font-weight: 500;
+    color: var(--text);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: transform 0.08s, background 0.12s;
+  }
+
+  .k:active { transform: scale(0.95); background: var(--sunken); }
+  .k:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .k.op { background: var(--sunken); color: var(--text2); font-size: 20px; }
+  .k.op[data-armed='true'] { background: var(--accent); color: var(--accent-ink); }
+  .k.wide { grid-row: span 2; }
+  .k.tiny { font-size: 15px; font-weight: 550; }
+
+  .k.done {
+    grid-row: span 2;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 15px;
+    font-weight: 620;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+
+  .k.done:disabled { opacity: 0.4; box-shadow: none; cursor: default; }
+  .k.done:disabled:active { transform: none; }
+
+  /* ---------- 说明栏 ---------- */
+  .notes { display: flex; flex-direction: column; gap: 26px; }
+
+  .note h3 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    color: var(--text);
+  }
+
+  .note p { margin: 0 0 10px; color: var(--text2); font-size: 14.5px; }
+  .note p:last-child { margin-bottom: 0; }
+
+  .calc {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    line-height: 1.85;
+    color: var(--text2);
+    margin: 0 0 10px;
+  }
+
+  .calc b { color: var(--text); font-weight: 650; }
+  .calc .hl { color: var(--tax); }
+
+  .asks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+
+  .asks li {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 10px;
+    font-size: 14.5px;
+    color: var(--text2);
+  }
+
+  .asks .n {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 650;
+    color: var(--accent);
+    background: var(--accent-wash);
+    border-radius: 6px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    margin-top: 2px;
+  }
+
+  .asks strong { color: var(--text); font-weight: 620; }
+
+  .hint-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: 14px;
+  }
+
+  .hint-row .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+</style>
+
+<div class="wrap">
+  <div class="doc-head">
+    <p class="eyebrow">草案 · 记账本 v1.8</p>
+    <h1>自建数字键盘</h1>
+    <p class="lede">
+      点金额才弹出，页面高度不再被系统键盘挤变形。可以直接算式输入，
+      也可以一键叠加马来西亚餐厅账单上的服务费和 SST，税率随手就能改。下面这个是能真按的，试试看。
+    </p>
+  </div>
+
+  <div class="cols">
+    <!-- ================= 手机 ================= -->
+    <div class="phone">
+      <header class="bar">
+        <span class="back">‹</span>
+        <h2>记一笔</h2>
+        <span class="pad"></span>
+      </header>
+
+      <div class="form">
+        <div class="seg" role="group" aria-label="收支类型">
+          <button type="button" aria-pressed="true">支出</button>
+          <button type="button" aria-pressed="false">收入</button>
+        </div>
+
+        <button type="button" class="amount" id="amountField" data-active="false" aria-label="金额，点击输入">
+          <span class="sym">RM</span>
+          <span class="val" id="amountVal" data-empty="true">0.00</span>
+          <span class="tax-mark" id="taxMark" hidden></span>
+        </button>
+
+        <div class="field">
+          <span class="field-label">分类</span>
+          <div class="cat-grid">
+            <button type="button" class="chip" aria-pressed="true"><span class="e">🍜</span>餐饮</button>
+            <button type="button" class="chip" aria-pressed="false"><span class="e">🚌</span>交通</button>
+            <button type="button" class="chip" aria-pressed="false"><span class="e">🛍️</span>购物</button>
+            <button type="button" class="chip" aria-pressed="false"><span class="e">🏠</span>居住</button>
+            <button type="button" class="chip" aria-pressed="false"><span class="e">🎮</span>娱乐</button>
+          </div>
+        </div>
+
+        <p class="ghost-note">账户、日期、备注在下面，键盘收起后可见。</p>
+        <button type="button" class="reset-btn" id="btnReset">
+          ↺ 模拟「保存并记下一笔」
+          <span>只有这时才归零。关键盘不会。</span>
+        </button>
+      </div>
+
+      <!-- ================= 键盘 ================= -->
+      <div class="pad-sheet" id="pad" data-open="false">
+        <div class="expr" id="expr"></div>
+
+        <div class="rate-edit" id="rateEdit" hidden>
+          <span class="re-label" id="reLabel">服务费税率</span>
+          <span class="re-val"><span id="reVal">10</span><i>%</i></span>
+        </div>
+
+        <div class="receipt" id="receipt" data-show="false">
+          <div class="r-line">
+            <span>小计</span><span class="lead"></span><span class="num" id="rBase">0.00</span>
+          </div>
+          <div class="r-line" id="rScRow">
+            <span id="rScLabel">服务费 10%</span><span class="lead"></span><span class="num" id="rSc">0.00</span>
+          </div>
+          <div class="r-line" id="rSstRow">
+            <span id="rSstLabel">SST 6%</span><span class="lead"></span><span class="num" id="rSst">0.00</span>
+          </div>
+          <div class="r-line total">
+            <span>合计</span><span class="lead"></span><span class="num" id="rTotal">0.00</span>
+          </div>
+        </div>
+
+        <div class="tax-row" id="taxRow">
+          <div class="tax-ctl" id="ctlSc" data-on="false">
+            <button type="button" class="tax-toggle" id="btnSc" aria-pressed="false">服务费</button>
+            <button type="button" class="tax-rate" id="rateSc" aria-label="修改服务费税率">10%</button>
+          </div>
+          <div class="tax-ctl" id="ctlSst" data-on="false">
+            <button type="button" class="tax-toggle" id="btnSst" aria-pressed="false">SST</button>
+            <button type="button" class="tax-rate" id="rateSst" aria-label="修改 SST 税率">6%</button>
+          </div>
+        </div>
+
+        <div class="keys" id="keys">
+          <button type="button" class="k op tiny" data-k="del">⌫</button>
+          <button type="button" class="k op" data-k="÷">÷</button>
+          <button type="button" class="k op" data-k="×">×</button>
+          <button type="button" class="k op" data-k="−">−</button>
+
+          <button type="button" class="k" data-k="7">7</button>
+          <button type="button" class="k" data-k="8">8</button>
+          <button type="button" class="k" data-k="9">9</button>
+          <button type="button" class="k op wide" data-k="+">+</button>
+
+          <button type="button" class="k" data-k="4">4</button>
+          <button type="button" class="k" data-k="5">5</button>
+          <button type="button" class="k" data-k="6">6</button>
+
+          <button type="button" class="k" data-k="1">1</button>
+          <button type="button" class="k" data-k="2">2</button>
+          <button type="button" class="k" data-k="3">3</button>
+          <button type="button" class="k done" id="btnDone" data-k="done" disabled>完成</button>
+
+          <button type="button" class="k tiny" data-k="00">00</button>
+          <button type="button" class="k" data-k="0">0</button>
+          <button type="button" class="k" data-k=".">.</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 说明 ================= -->
+    <div class="notes">
+      <section class="note">
+        <h3>两项都按小计算，互不叠加</h3>
+        <p>
+          服务费和 SST 各自独立地按餐费算，谁也不踩在谁头上。
+        </p>
+        <pre class="calc">餐费              87.00
+<span class="hl">服务费 10%</span>         8.70   ← 87.00 × 10%
+<span class="hl">SST 6%</span>             5.22   ← 87.00 × 6%，同样按小计
+                ──────
+合计            <b>100.92</b></pre>
+        <p>
+          自带一个验算：<strong>把两个税率都改成 6%，两行金额必须一模一样</strong>。
+          不一样就说明算法踩叠加了。明细逐行拆开也是为了让你能拿手里那张单子对一遍。
+        </p>
+      </section>
+
+      <section class="note">
+        <h3>算式直接按，不用切计算器</h3>
+        <p>
+          三个人 <span style="font-family: var(--mono)">87 ÷ 3</span>、买两件
+          <span style="font-family: var(--mono)">45 × 2</span>，按完「完成」直接落账。
+          算式在上方实时显示，按下去之前就知道结果是多少。没有等号键——「完成」自己会先算再提交。
+        </p>
+      </section>
+
+      <section class="note">
+        <h3>三个已定的规则</h3>
+        <ul class="asks">
+          <li>
+            <span class="n">1</span>
+            <span><strong>税率随手改。</strong>点税率那半边，直接用这套键盘打新的数字——
+            不同店服务费 5%、10%、不收都有。<strong>税率会记住</strong>，因为它是配置；
+            <strong>开关每次归零</strong>，因为上一笔在餐厅，这一笔可能在便利店。</span>
+          </li>
+          <li>
+            <span class="n">2</span>
+            <span><strong>只存最终金额。</strong>落账的就是 101.44，不另存拆解——
+            记录里多一份「原价 + 税率」反而让人分不清哪个数才作数。
+            好处是本地数据库和云端都不用加列，这次不需要迁移。</span>
+          </li>
+          <li>
+            <span class="n">3</span>
+            <span><strong>归零只发生在页面打开时。</strong>关掉键盘不等于这笔记完了——
+            同一笔里键盘开开合合，已加的服务费和 SST 必须保持住，否则重新点开金额就退回小计。
+            徽记也一样，按下保存之前一直挂着。          </li>
+        </ul>
+      </section>
+
+      <div class="hint-row">
+        <span class="dot"></span>
+        电脑上物理键盘也能用：数字、<span style="font-family: var(--mono)">+−*/</span>、退格、回车。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    // 税率是配置，开关是这一笔的选择：税率记住，开关每次归零。
+    var state = {
+      mode: 'amount', // amount | rate-sc | rate-sst
+      cur: '', prev: null, op: null,
+      scOn: false, sstOn: false,
+      scRate: '10', sstRate: '6',
+      rateDraft: '',
+      open: false,
+    }
+
+    var $ = function (id) { return document.getElementById(id) }
+    var pad = $('pad'), amountField = $('amountField'), amountVal = $('amountVal')
+    var taxMark = $('taxMark'), expr = $('expr'), rateEdit = $('rateEdit')
+    var reLabel = $('reLabel'), reVal = $('reVal'), receipt = $('receipt')
+    var taxRow = $('taxRow'), btnDone = $('btnDone')
+
+    var fmt = function (n) {
+      return (Math.round(n * 100) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    }
+    var pct = function (s) { var n = parseFloat(s); return isNaN(n) ? 0 : n / 100 }
+
+    // 算式求值。除以零返回 null，由调用方决定怎么显示——
+    // 不返回 Infinity，免得它一路漏进金额里。
+    function evaluate() {
+      var cur = state.cur === '' || state.cur === '.' ? null : parseFloat(state.cur)
+      if (state.op === null) return cur
+      if (cur === null) return state.prev
+      if (state.op === '÷' && cur === 0) return null
+      if (state.op === '+') return state.prev + cur
+      if (state.op === '−') return state.prev - cur
+      if (state.op === '×') return state.prev * cur
+      return state.prev / cur
+    }
+
+    // 两项都按小计算，互不叠加。
+    // 自带一个验算：两个税率填成一样，两行金额就必须一模一样。
+    function applyTax(base) {
+      var sc = state.scOn ? base * pct(state.scRate) : 0
+      var sst = state.sstOn ? base * pct(state.sstRate) : 0
+      return { base: base, sc: sc, sst: sst, total: base + sc + sst }
+    }
+
+    var editingRate = function () { return state.mode !== 'amount' }
+
+    function render() {
+      var isRate = editingRate()
+      var base = evaluate()
+      var has = base !== null && !isNaN(base)
+      var t = applyTax(has ? base : 0)
+
+      // --- 顶部：算式 / 税率 二选一 ---
+      expr.hidden = isRate
+      rateEdit.hidden = !isRate
+      if (isRate) {
+        reLabel.textContent = (state.mode === 'rate-sc' ? '服务费' : 'SST') + '税率'
+        reVal.textContent = state.rateDraft === '' ? '0' : state.rateDraft
+      } else {
+        expr.textContent = state.op !== null
+          ? fmt(state.prev) + ' ' + state.op + (state.cur ? ' ' + state.cur : '')
+          : ''
+      }
+
+      // --- 小票明细 ---
+      var showReceipt = !isRate && (state.scOn || state.sstOn) && has
+      receipt.dataset.show = showReceipt ? 'true' : 'false'
+      $('rScRow').hidden = !state.scOn
+      $('rSstRow').hidden = !state.sstOn
+      $('rScLabel').textContent = '服务费 ' + state.scRate + '%'
+      $('rSstLabel').textContent = 'SST ' + state.sstRate + '%'
+      $('rBase').textContent = fmt(t.base)
+      $('rSc').textContent = fmt(t.sc)
+      $('rSst').textContent = fmt(t.sst)
+      $('rTotal').textContent = fmt(t.total)
+
+      // --- 金额栏 ---
+      var empty = !has && state.cur === ''
+      amountVal.dataset.empty = empty ? 'true' : 'false'
+      amountVal.innerHTML = (empty ? '0.00' : fmt(t.total)) +
+        (state.open && !isRate ? '<span class="caret"></span>' : '')
+
+      var marks = []
+      if (state.scOn) marks.push('服务费 ' + state.scRate + '%')
+      if (state.sstOn) marks.push('SST ' + state.sstRate + '%')
+      // 按下保存之前，这个标记一直是真的——它解释了金额为什么不等于你打进去的数
+      taxMark.hidden = marks.length === 0
+      taxMark.textContent = '含 ' + marks.join(' · ')
+
+      // --- 税率控件 ---
+      taxRow.style.opacity = isRate ? '0.4' : '1'
+      taxRow.style.pointerEvents = isRate ? 'none' : ''
+      $('ctlSc').dataset.on = state.scOn ? 'true' : 'false'
+      $('ctlSst').dataset.on = state.sstOn ? 'true' : 'false'
+      $('btnSc').setAttribute('aria-pressed', state.scOn ? 'true' : 'false')
+      $('btnSst').setAttribute('aria-pressed', state.sstOn ? 'true' : 'false')
+      $('rateSc').textContent = state.scRate + '%'
+      $('rateSst').textContent = state.sstRate + '%'
+
+      // --- 按键 ---
+      document.querySelectorAll('.k.op[data-k]').forEach(function (b) {
+        var isArith = ['+', '−', '×', '÷'].indexOf(b.dataset.k) !== -1
+        b.disabled = isRate && isArith // 税率用不上四则运算
+        b.dataset.armed = !isRate && b.dataset.k === state.op && state.cur === '' ? 'true' : 'false'
+      })
+      btnDone.textContent = isRate ? '确定' : '完成'
+      btnDone.disabled = isRate ? false : !has || t.total <= 0
+    }
+
+    function press(k) {
+      if (editingRate()) return pressRate(k)
+
+      if (k === 'done') { close(); return }
+      if (k === 'del') {
+        if (state.cur !== '') state.cur = state.cur.slice(0, -1)
+        else if (state.op !== null) { state.op = null; state.cur = String(state.prev); state.prev = null }
+      } else if (k === '.') {
+        if (state.cur.indexOf('.') === -1) state.cur = state.cur === '' ? '0.' : state.cur + '.'
+      } else if (k === '0' || k === '00') {
+        if (state.cur !== '' || k === '0') state.cur = limit(state.cur + k)
+      } else if ('123456789'.indexOf(k) !== -1) {
+        state.cur = limit(state.cur === '0' ? k : state.cur + k)
+      } else {
+        // 运算符：先把前面的算完，支持连按 1+2+3
+        var v = evaluate()
+        if (v !== null && !isNaN(v)) { state.prev = v; state.cur = ''; state.op = k }
+      }
+      render()
+    }
+
+    // 税率复用同一套按键，省得再唤起系统键盘
+    function pressRate(k) {
+      if (k === 'done') { commitRate(); return }
+      if (k === 'del') state.rateDraft = state.rateDraft.slice(0, -1)
+      else if (k === '.') {
+        if (state.rateDraft.indexOf('.') === -1) {
+          state.rateDraft = state.rateDraft === '' ? '0.' : state.rateDraft + '.'
+        }
+      } else if (/^[0-9]+$/.test(k)) {
+        var next = state.rateDraft === '0' ? k : state.rateDraft + k
+        // 税率封顶 100%，两位小数够用了
+        if (/^\d{0,3}(\.\d{0,2})?$/.test(next) && parseFloat(next || '0') <= 100) {
+          state.rateDraft = next
+        }
+      }
+      render()
+    }
+
+    function commitRate() {
+      var v = state.rateDraft === '' ? '0' : String(parseFloat(state.rateDraft))
+      if (state.mode === 'rate-sc') { state.scRate = v; if (parseFloat(v) > 0) state.scOn = true }
+      else { state.sstRate = v; if (parseFloat(v) > 0) state.sstOn = true }
+      state.mode = 'amount'
+      render()
+    }
+
+    function openRate(which) {
+      state.mode = which
+      state.rateDraft = which === 'rate-sc' ? state.scRate : state.sstRate
+      render()
+    }
+
+    // 最多两位小数，整数位留够——记账用不到天文数字
+    function limit(s) {
+      var m = s.match(/^(\d{0,9})(\.\d{0,2})?/)
+      return m ? m[0] : s
+    }
+
+    // 归零发生在「记一笔」页面打开时，不是键盘每次弹出时——
+    // 关掉键盘不等于这笔记完了，同一笔里开开合合必须保持住已加的税费。
+    // （真实应用里 resetForEntry 由页面挂载时调用；草案里留个按钮手动试。）
+    function resetForEntry() {
+      state.cur = ''
+      state.prev = null
+      state.op = null
+      state.scOn = false
+      state.sstOn = false
+      state.mode = 'amount'
+    }
+
+    function open() {
+      state.open = true
+      state.mode = 'amount'
+      pad.dataset.open = 'true'
+      amountField.dataset.active = 'true'
+      render()
+    }
+
+    function close() {
+      state.open = false
+      state.mode = 'amount'
+      pad.dataset.open = 'false'
+      amountField.dataset.active = 'false'
+      render()
+    }
+
+    amountField.addEventListener('click', function () { state.open ? close() : open() })
+    $('btnReset').addEventListener('click', function () { resetForEntry(); close() })
+    $('btnSc').addEventListener('click', function () { state.scOn = !state.scOn; render() })
+    $('btnSst').addEventListener('click', function () { state.sstOn = !state.sstOn; render() })
+    $('rateSc').addEventListener('click', function () { openRate('rate-sc') })
+    $('rateSst').addEventListener('click', function () { openRate('rate-sst') })
+
+    $('keys').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-k]')
+      if (b && !b.disabled) press(b.dataset.k)
+    })
+
+    // 电脑上物理键盘照常能用
+    window.addEventListener('keydown', function (e) {
+      if (!state.open) return
+      var map = { '*': '×', 'x': '×', '/': '÷', '-': '−', '+': '+' }
+      if (/^[0-9.]$/.test(e.key)) press(e.key)
+      else if (map[e.key] && !editingRate()) press(map[e.key])
+      else if (e.key === 'Backspace') press('del')
+      else if (e.key === 'Enter') press('done')
+      else if (e.key === 'Escape') editingRate() ? commitRate() : close()
+      else return
+      e.preventDefault()
+    })
+
+    // 示范用的分类和收支切换，草案里只做视觉反馈
+    document.querySelectorAll('.seg button, .chip').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var sibs = b.parentElement.children
+        for (var i = 0; i < sibs.length; i++) sibs[i].setAttribute('aria-pressed', 'false')
+        b.setAttribute('aria-pressed', 'true')
+      })
+    })
+
+    render()
+  })()
+</script>
