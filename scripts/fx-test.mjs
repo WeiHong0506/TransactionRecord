@@ -113,6 +113,14 @@ console.log('\n[4] v6 迁移：历史记录要认得自己当初是什么货币'
     },
   })
   await old.put('settings', { key: 'currency', value: 'MYR' })
+  await old.put('categories', {
+    id: 'exp-edu', name: '教育', icon: '📚', type: 'expense', slot: 8, order: 8,
+    createdAt: 1, updatedAt: 1, deletedAt: null, dirty: 0,
+  })
+  await old.put('categories', {
+    id: 'exp-food', name: '我改过的餐饮', icon: '🍜', type: 'expense', slot: 1, order: 1,
+    createdAt: 1, updatedAt: 1, deletedAt: null, dirty: 0,
+  })
   await old.put('accounts', { id: 'acc-cash', name: '现金', initialBalance: 500, order: 1 })
   await old.put('transactions', {
     id: 't1',
@@ -149,6 +157,32 @@ console.log('\n[4] v6 迁移：历史记录要认得自己当初是什么货币'
   ok('新账户保留传入的货币', acc.currency === 'CNY')
   const acc2 = await db.saveAccount({ name: '无币账户', icon: '💳', initialBalance: 0 })
   ok('没传货币的账户回退到 MYR', acc2.currency === 'MYR')
+
+  console.log('\n[5] v7/v8 迁移：分类改名与新增')
+  const cats = await db.getCategories()
+  const edu = cats.find((c) => c.id === 'exp-edu')
+  ok('分类还在，id 仍是 exp-edu', Boolean(edu), '改 id 会让已有记录变成未分类')
+  ok('名字改成了「家庭」', edu?.name === '家庭', edu?.name)
+  ok('图标跟着换了', edu?.icon === '👪', edu?.icon)
+  ok('改完标记为待上传，会同步到其他设备', edu?.dirty === 1)
+  // 用户自己改过名的分类不该被默认值覆盖
+  const food = cats.find((c) => c.id === 'exp-food')
+  ok('用户改过名的分类不受影响', food?.name === '我改过的餐饮', food?.name)
+
+  const travel = cats.find((c) => c.id === 'exp-travel')
+  ok('新增的「旅行」补进来了', travel?.name === '旅行', travel?.name)
+  ok('旅行排在通讯之后', (travel?.order ?? 0) === 10)
+  const other = cats.find((c) => c.id === 'exp-other' && c.type === 'expense')
+  ok('「其他」让位排到最后', other?.order === 11, String(other?.order))
+  ok(
+    '支出分类按 order 升序，其他在末尾',
+    cats.filter((c) => c.type === 'expense').at(-1)?.id === 'exp-other'
+  )
+
+  // 手动删掉的分类不该被后续迁移复活
+  await db.deleteCategory('exp-travel')
+  const afterDelete = await db.getCategories()
+  ok('删掉后不再出现在列表里', !afterDelete.some((c) => c.id === 'exp-travel'))
 }
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} 通过 ${pass} 项，失败 ${fail} 项\n`)

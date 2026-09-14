@@ -12,11 +12,15 @@ export const DEFAULT_CATEGORIES = [
   { id: 'exp-fun', name: '娱乐', icon: '🎮', type: 'expense', slot: 5, order: 5 },
   { id: 'exp-daily', name: '日用', icon: '🧴', type: 'expense', slot: 6, order: 6 },
   { id: 'exp-health', name: '医疗', icon: '💊', type: 'expense', slot: 7, order: 7 },
-  { id: 'exp-edu', name: '教育', icon: '📚', type: 'expense', slot: 8, order: 8 },
+  // id 保持 exp-edu：已经归到这个分类的记录都指着它，换 id 会把它们变成「未分类」
+  { id: 'exp-edu', name: '家庭', icon: '👪', type: 'expense', slot: 8, order: 8 },
   // 色槽只有 8 个（顺序经过 CVD 校验），第 9 个有颜色的分类必然要跟人共用一个。
   // 通讯和医疗都不太会同时排进前几名，所以让它们共用槽位 7。
   { id: 'exp-comm', name: '通讯', icon: '📱', type: 'expense', slot: 7, order: 9 },
-  { id: 'exp-other', name: '其他', icon: '📦', type: 'expense', slot: 0, order: 10 },
+  // 旅行和日用共用槽位 6：旅行只在出行的月份冒头，而日用是常年的小额，
+  // 两者几乎不会同时挤进环形图的前几名。
+  { id: 'exp-travel', name: '旅行', icon: '✈️', type: 'expense', slot: 6, order: 10 },
+  { id: 'exp-other', name: '其他', icon: '📦', type: 'expense', slot: 0, order: 11 },
   // 收入
   { id: 'inc-salary', name: '工资', icon: '💰', type: 'income', slot: 1, order: 11 },
   { id: 'inc-parttime', name: '兼职', icon: '💼', type: 'income', slot: 3, order: 12 },

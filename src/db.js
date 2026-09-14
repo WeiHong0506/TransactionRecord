@@ -8,7 +8,9 @@ const DB_NAME = 'transaction-record'
 // v5：补齐后来新增的默认分类（老用户的分类表是在 v1 就建好的，不会自动拿到新分类）
 // v6：货币下沉到账户和每一笔流水。在此之前货币只是个全局显示设置，
 //     金额都是裸数字；迁移时按当时的设置值回填，否则改主货币会把历史记录的含义改掉
-const DB_VERSION = 6
+// v7：把默认分类「教育」改名为「家庭」。只改名不换 id——记录都指着 exp-edu
+// v8：新增默认分类「旅行」，并把「其他」挪到它后面
+const DB_VERSION = 8
 
 let dbPromise = null
 
@@ -101,6 +103,32 @@ function getDB() {
           }
           // 主货币就是原来那个设置值，汇率表里它恒为 1
           await settings.put({ key: 'fx', value: { [legacy]: 1 } })
+        }
+        if (oldVersion < 8 && oldVersion >= 1) {
+          // 补后来新增的默认分类（和 v5 同一套逻辑）。
+          // existing 里包含墓碑，所以你手动删掉的分类不会被复活。
+          const store = tx.objectStore('categories')
+          const existing = new Set((await store.getAll()).map((c) => c.id))
+          const now = Date.now()
+          for (const c of DEFAULT_CATEGORIES) {
+            if (existing.has(c.id)) continue
+            await store.put({ ...c, createdAt: now, updatedAt: now, deletedAt: null, dirty: 1 })
+          }
+          // 「其他」让位给新分类，排到最后。只在它还停在旧位置时才动。
+          const other = await store.get('exp-other')
+          if (other && other.order === 10) {
+            await store.put({ ...other, order: 11, updatedAt: now, dirty: 1 })
+          }
+        }
+        if (oldVersion < 7 && oldVersion >= 1) {
+          // 「教育」改名「家庭」。id 不动，所以已有记录照样归在这个分类下。
+          // 只在名字还是「教育」时才改——你自己改过名的话说明你有别的用法，不该被覆盖。
+          const store = tx.objectStore('categories')
+          const row = await store.get('exp-edu')
+          if (row && row.name === '教育' && !row.deletedAt) {
+            const now = Date.now()
+            await store.put({ ...row, name: '家庭', icon: '👪', updatedAt: now, dirty: 1 })
+          }
         }
       },
     })
