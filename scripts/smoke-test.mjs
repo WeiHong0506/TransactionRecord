@@ -220,6 +220,18 @@ const noNativeInput = await page.evaluate(() => {
 })
 console.log(noNativeInput ? '✓ 金额栏是按钮，不会唤起系统键盘' : '✗ 金额栏仍是原生输入框')
 
+// 刚进「记一笔」时键盘应当是收着的，点金额栏才唤起
+const padClosedAtFirst =
+  (await page.locator('.pad-sheet[data-open="true"]').count()) === 0
+await page.click('#amt')
+await page.waitForTimeout(350)
+const padOpensOnTap = (await page.locator('.pad-sheet[data-open="true"]').count()) === 1
+console.log(
+  padClosedAtFirst && padOpensOnTap
+    ? '✓ 键盘默认收起，点金额栏才唤起'
+    : `✗ 键盘初始状态不对（初始收起=${padClosedAtFirst}，点击后展开=${padOpensOnTap}）`
+)
+
 // 税费：87 开服务费 10% + SST 6% → 100.92（两项都按小计，不叠加）
 // 新记一笔时键盘本来就是开着的，再点一下反而会收起来
 async function ensurePad(page) {

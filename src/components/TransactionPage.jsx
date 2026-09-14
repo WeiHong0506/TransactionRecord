@@ -25,9 +25,10 @@ export default function TransactionPage({
   const [type, setType] = useState(initial?.type ?? 'expense')
   const [amount, setAmount] = useState(initial ? Number(initial.amount) : null)
   const [taxMarks, setTaxMarks] = useState([])
-  // 新记一笔时直接把键盘唤起来——你点加号进来就是为了输金额；
-  // 编辑已有记录时不弹，免得挡住要改的其他字段
-  const [padOpen, setPadOpen] = useState(!initial?.id)
+  // 键盘一律要点金额栏才唤起，新记一笔也不例外。
+  // 自动弹虽然省一次点击，但会盖住账户、日期、备注三栏，
+  // 一进来先看到完整表单更重要。
+  const [padOpen, setPadOpen] = useState(false)
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '')
   const [accountId, setAccountId] = useState(
     initial?.accountId ?? defaultAccountId ?? accounts[0]?.id ?? ''
