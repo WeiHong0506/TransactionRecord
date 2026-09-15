@@ -11,8 +11,14 @@
 
     <!-- iOS 添加到主屏幕 -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="记账本" />
+    <!--
+      这里刻意不写 apple-mobile-web-app-status-bar-style。
+      写了 default 的话 iOS 会画一条纯白 #ffffff 的系统状态栏，
+      和应用背景 #f9f9f7 差一点点，顶上就多出一条看得见的接缝；
+      而且这个 meta 的优先级压过下面的 theme-color，设了也白设。
+      不写，iOS 就按 theme-color 上色，浅色深色各自匹配，无缝。
+    -->
     <link rel="apple-touch-icon" href="%BASE_URL%icons/apple-touch-icon.png" />
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%icons/favicon.svg" />
 

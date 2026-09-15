@@ -326,6 +326,27 @@ await page.click('.icon-btn[aria-label="设置"]')
 await page.waitForSelector('.list-item:has-text("预算")')
 await page.click('.list-item:has-text("预算")')
 await page.waitForSelector('.bud-input')
+// 逐字符输入时焦点必须留在输入框里。
+// 曾经的 bug：行组件定义在父组件函数体内，每次重渲染都被当成新组件类型，
+// 整棵子树卸载重建——输入框换了 DOM，焦点没了，手机上系统键盘直接收起。
+await page.click('.bud-input')
+await page.keyboard.type('12')
+const focusKept = await page.evaluate(() => {
+  const el = document.activeElement
+  return {
+    focused: Boolean(el && el.classList.contains('bud-input')),
+    value: el && el.value,
+  }
+})
+console.log(
+  focusKept.focused && focusKept.value === '12'
+    ? '✓ 预算输入时焦点不丢（键盘不会被顶掉）'
+    : `✗ 预算输入丢焦点：${JSON.stringify(focusKept)}`
+)
+await page.locator('.bud-input').first().fill('')
+await page.locator('.bud-input').first().blur()
+await page.waitForTimeout(300)
+
 const monthExpense = await page.evaluate(() => {
   const el = document.querySelector('.summary .stat .v')
   return el ? Number(el.textContent.replace(/[^0-9.]/g, '')) : 0
@@ -404,6 +425,28 @@ await page.waitForSelector('.summary', { timeout: 10000 })
 const offlineRows = await page.locator('.row').count()
 console.log(`✓ 断网后仍可打开，列表仍有 ${offlineRows} 条记录`)
 await ctx.setOffline(false)
+
+// 顶部状态栏配色：三处必须一致，否则 iOS/安卓会在顶上画出一条色差带。
+// apple-mobile-web-app-status-bar-style 一旦存在就会压过 theme-color，
+// 让 iOS 画一条纯白系统状态栏，和 #f9f9f7 的页面背景差出一道接缝。
+const themeMeta = await page.evaluate(() => ({
+  metas: [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => ({
+    media: m.getAttribute('media'),
+    content: m.getAttribute('content'),
+  })),
+  hasAppleStatusBar: Boolean(
+    document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
+  ),
+  plane: getComputedStyle(document.body).backgroundColor,
+}))
+const lightTheme = themeMeta.metas.find((m) => m.media?.includes('light'))?.content
+console.log(
+  !themeMeta.hasAppleStatusBar &&
+    lightTheme === '#f9f9f7' &&
+    themeMeta.plane === 'rgb(249, 249, 247)'
+    ? '✓ 状态栏配色与页面背景一致，没有 apple-status-bar 覆盖'
+    : `✗ 顶部配色不一致：${JSON.stringify(themeMeta)}`
+)
 
 if (errors.length) {
   console.log('\n⚠ 控制台报错：')
