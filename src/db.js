@@ -10,7 +10,9 @@ const DB_NAME = 'transaction-record'
 //     金额都是裸数字；迁移时按当时的设置值回填，否则改主货币会把历史记录的含义改掉
 // v7：把默认分类「教育」改名为「家庭」。只改名不换 id——记录都指着 exp-edu
 // v8：新增默认分类「旅行」，并把「其他」挪到它后面
-const DB_VERSION = 8
+// v9：预算。单独一张表而不是塞进 settings——settings 不参与同步，
+//     而预算必须跨设备一致，不然手机上设了笔记本上看不到
+const DB_VERSION = 9
 
 let dbPromise = null
 
@@ -104,6 +106,12 @@ function getDB() {
           // 主货币就是原来那个设置值，汇率表里它恒为 1
           await settings.put({ key: 'fx', value: { [legacy]: 1 } })
         }
+        if (oldVersion < 9) {
+          // 预算：id 就是 'total' 或分类 id，天然幂等，两台设备同时改也能靠 LWW 收敛
+          if (!db.objectStoreNames.contains('budgets')) {
+            db.createObjectStore('budgets', { keyPath: 'id' })
+          }
+        }
         if (oldVersion < 8 && oldVersion >= 1) {
           // 补后来新增的默认分类（和 v5 同一套逻辑）。
           // existing 里包含墓碑，所以你手动删掉的分类不会被复活。
@@ -186,6 +194,44 @@ export async function deleteCategory(id) {
   const row = await db.get('categories', id)
   if (!row) return
   await db.put('categories', { ...row, deletedAt: Date.now(), updatedAt: Date.now(), dirty: 1 })
+}
+
+/* ---------------- 预算 ---------------- */
+
+// 只返回真的设了数的行。amount <= 0 视为「没设」，界面上就是留空。
+export async function getBudgets() {
+  const db = await getDB()
+  const all = await db.getAll('budgets')
+  return all.filter((b) => alive(b) && Number(b.amount) > 0)
+}
+
+export async function saveBudget(id, amount, currency) {
+  const db = await getDB()
+  const now = Date.now()
+  const prev = await db.get('budgets', id)
+  const n = Math.round(Number(amount) * 100) / 100
+
+  // 清空等于删除。留一条 amount=0 的行会让其他设备以为「预算是 0」，
+  // 那和「没设预算」完全是两回事。
+  if (!Number.isFinite(n) || n <= 0) {
+    if (!prev) return null
+    const row = { ...prev, amount: 0, deletedAt: now, updatedAt: now, dirty: 1 }
+    await db.put('budgets', row)
+    return row
+  }
+
+  const row = {
+    ...(prev ?? {}),
+    id,
+    amount: n,
+    currency: currency || 'MYR',
+    createdAt: prev?.createdAt ?? now,
+    updatedAt: now,
+    deletedAt: null,
+    dirty: 1,
+  }
+  await db.put('budgets', row)
+  return row
 }
 
 /* ---------------- 资金账户 ---------------- */
@@ -341,7 +387,7 @@ export async function mergeRemote(storeName, remoteRows) {
 export async function purgeTombstones(maxAgeMs = 30 * 24 * 3600 * 1000) {
   const db = await getDB()
   const cutoff = Date.now() - maxAgeMs
-  for (const name of ['transactions', 'categories', 'accounts']) {
+  for (const name of ['transactions', 'categories', 'accounts', 'budgets']) {
     const tx = db.transaction(name, 'readwrite')
     const all = await tx.store.getAll()
     for (const r of all) {
@@ -355,19 +401,21 @@ export async function purgeTombstones(maxAgeMs = 30 * 24 * 3600 * 1000) {
 
 export async function exportAll() {
   const db = await getDB()
-  const [transactions, categories, accounts, settings] = await Promise.all([
+  const [transactions, categories, accounts, budgets, settings] = await Promise.all([
     db.getAll('transactions'),
     db.getAll('categories'),
     db.getAll('accounts'),
+    db.getAll('budgets'),
     db.getAll('settings'),
   ])
   return {
     format: 'transaction-record-backup',
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     transactions: transactions.filter(alive),
     categories: categories.filter(alive),
     accounts: accounts.filter(alive),
+    budgets: budgets.filter(alive),
     settings: settings.filter((s) => !String(s.key).startsWith('sync.')),
   }
 }
@@ -378,12 +426,16 @@ export async function importAll(data, mode = 'merge') {
   }
   const db = await getDB()
   const now = Date.now()
-  const tx = db.transaction(['transactions', 'categories', 'accounts', 'settings'], 'readwrite')
+  const tx = db.transaction(
+    ['transactions', 'categories', 'accounts', 'budgets', 'settings'],
+    'readwrite'
+  )
   if (mode === 'replace') {
     await Promise.all([
       tx.objectStore('transactions').clear(),
       tx.objectStore('categories').clear(),
       tx.objectStore('accounts').clear(),
+      tx.objectStore('budgets').clear(),
     ])
   }
   for (const a of data.accounts || []) {
@@ -412,6 +464,15 @@ export async function importAll(data, mode = 'merge') {
       dirty: 1,
     })
   }
+  // 老备份（version 2）没有 budgets 字段，|| [] 兜住
+  for (const b of data.budgets || []) {
+    tx.objectStore('budgets').put({
+      ...b,
+      updatedAt: now,
+      deletedAt: b.deletedAt ?? null,
+      dirty: 1,
+    })
+  }
   for (const s of data.settings || []) tx.objectStore('settings').put(s)
   await tx.done
   return (data.transactions || []).length
@@ -426,9 +487,9 @@ export async function importAll(data, mode = 'merge') {
 export async function clearAllData() {
   const db = await getDB()
   const now = Date.now()
-  const tx = db.transaction(['transactions', 'categories', 'accounts'], 'readwrite')
+  const tx = db.transaction(['transactions', 'categories', 'accounts', 'budgets'], 'readwrite')
 
-  for (const name of ['transactions', 'categories', 'accounts']) {
+  for (const name of ['transactions', 'categories', 'accounts', 'budgets']) {
     const store = tx.objectStore(name)
     const all = await store.getAll()
     for (const r of all) {
@@ -459,11 +520,12 @@ export async function clearAllData() {
 // 切换账号时：清空本地并重新从云端拉全量
 export async function resetForNewAccount() {
   const db = await getDB()
-  const tx = db.transaction(['transactions', 'categories', 'accounts'], 'readwrite')
+  const tx = db.transaction(['transactions', 'categories', 'accounts', 'budgets'], 'readwrite')
   await Promise.all([
     tx.objectStore('transactions').clear(),
     tx.objectStore('categories').clear(),
     tx.objectStore('accounts').clear(),
+    tx.objectStore('budgets').clear(),
   ])
   await tx.done
 }

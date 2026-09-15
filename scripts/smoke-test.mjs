@@ -319,6 +319,53 @@ await page.waitForSelector('.cal-grid')
 await shot('13-dark-calendar')
 await page.emulateMedia({ colorScheme: 'light' })
 
+// —— 预算：设上限 → 进度条出现 → 超支变红 ——
+await page.click('.dock-tab:has-text("资产")')
+await page.waitForTimeout(300)
+await page.click('.icon-btn[aria-label="设置"]')
+await page.waitForSelector('.list-item:has-text("预算")')
+await page.click('.list-item:has-text("预算")')
+await page.waitForSelector('.bud-input')
+const monthExpense = await page.evaluate(() => {
+  const el = document.querySelector('.summary .stat .v')
+  return el ? Number(el.textContent.replace(/[^0-9.]/g, '')) : 0
+})
+// 故意把总额设得比本月支出低一点，好验证超支态
+await page.locator('.bud-input').nth(0).fill(String(Math.max(1, Math.round(monthExpense * 0.8))))
+await page.waitForTimeout(400)
+await page.click('.dock-tab:has-text("统计")')
+await page.waitForSelector('.summary-budget .bud-track')
+await page.waitForTimeout(300)
+const bud = await page.evaluate(() => {
+  const row = document.querySelector('.summary-budget .bud-row')
+  const fill = row.querySelector('.bud-fill')
+  return {
+    state: row.dataset.state,
+    // 超支时进度条必须停在满格，不能冲出容器
+    fillPct: parseFloat(fill.style.width),
+    text: row.querySelector('.bud-foot').textContent.trim(),
+  }
+})
+console.log(
+  bud.state === 'over' && bud.fillPct === 100 && bud.text.includes('超支')
+    ? '✓ 超支时进度条满格变红并写明超了多少'
+    : `✗ 超支态不对：${JSON.stringify(bud)}`
+)
+// 预算只管支出：记一笔收入不该让进度条回退
+const before = await page.textContent('.summary-budget .bud-num')
+await page.click('.fab')
+await page.waitForSelector('.page-form')
+await ensurePad(page)
+await page.click('.seg button:has-text("收入")')
+for (const d of '5000') await page.click(`.pad-key:text-is("${d}")`)
+await page.click('.pad-key.done')
+await page.click('button[type="submit"]')
+await page.waitForTimeout(600)
+const after = await page.textContent('.summary-budget .bud-num')
+console.log(
+  before.trim() === after.trim() ? '✓ 收入不抵扣预算' : `✗ 收入影响了预算：${before} → ${after}`
+)
+
 // —— 汇率输入：逐字符敲，0 和小数点都必须留得住 ——
 // 这个曾经是坏的：输入框的值从已存数字反推，按下 0 的瞬间就被当成清空。
 await page.click('.dock-tab:has-text("资产")')

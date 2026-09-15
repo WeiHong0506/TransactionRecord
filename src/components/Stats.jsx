@@ -4,6 +4,7 @@ import TrendChart from './TrendChart.jsx'
 import CalendarView from './CalendarView.jsx'
 import TransactionList from './TransactionList.jsx'
 import ListFilter, { EMPTY_FILTER, applyFilter, isFiltered } from './ListFilter.jsx'
+import BudgetBar from './BudgetBar.jsx'
 import {
   formatAmount,
   homeAmountOf,
@@ -22,6 +23,8 @@ export default function Stats({
   accounts,
   currency,
   missingRates = [],
+  budget,
+  onOpenBudget,
   onOpenSettings,
   onEdit,
 }) {
@@ -168,6 +171,30 @@ export default function Stats({
           )}
         </div>
       </div>
+
+      {type === 'expense' && (
+        <div className="section">
+          <div className="section-head">
+            <h2>分类预算</h2>
+            <button className="link-btn" onClick={onOpenBudget}>
+              {budget?.perCategory?.length ? '调整' : '去设置'}
+            </button>
+          </div>
+          {budget?.perCategory?.length ? (
+            <div className="card card-pad bud-list">
+              {budget.perCategory.map((line) => (
+                <BudgetBar key={line.id} line={line} currency={currency} compact />
+              ))}
+            </div>
+          ) : (
+            <button className="card card-pad empty bud-empty" onClick={onOpenBudget}>
+              <div className="big">🎯</div>
+              <p>还没给任何分类设上限</p>
+              <p>设一个，这里就会显示进度</p>
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="section">
         <div className="section-head">

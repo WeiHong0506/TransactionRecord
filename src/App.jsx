@@ -5,11 +5,13 @@ import {
   deleteTransaction,
   getAccounts,
   getAllTransactions,
+  getBudgets,
   getCategories,
   getSetting,
   initAccounts,
   initCategories,
   saveAccount,
+  saveBudget,
   saveCategory,
   saveTransaction,
   setSetting,
@@ -24,6 +26,7 @@ import {
   shiftMonth,
   symbolOf,
   sumBy,
+  todayStr,
 } from './utils.js'
 import TransactionPage from './components/TransactionPage.jsx'
 import CategoryManager from './components/CategoryManager.jsx'
@@ -32,16 +35,20 @@ import Settings from './components/Settings.jsx'
 import AccountsPage from './components/AccountsPage.jsx'
 import ImportSheet from './components/ImportSheet.jsx'
 import TabBar from './components/TabBar.jsx'
+import BudgetSettings from './components/BudgetSettings.jsx'
+import BudgetBar from './components/BudgetBar.jsx'
+import { computeBudget } from './budget.js'
 import { useSync } from './useSync.js'
 
 export default function App() {
   const [ready, setReady] = useState(false)
-  // stats | accounts | settings（settings 不在底部导航里，从资产页右上角进）
+  // stats | accounts | settings | budget（后两个不在底部导航里，从资产页右上角进）
   const [tab, setTab] = useState('stats')
   const [month, setMonth] = useState(currentMonth())
   const [records, setRecords] = useState([])
   const [categories, setCategories] = useState([])
   const [accounts, setAccounts] = useState([])
+  const [budgets, setBudgets] = useState([])
   // currency 现在的含义是「主货币」：所有折算后的数字都用它表示
   const [currency, setCurrency] = useState('MYR')
   const [fx, setFx] = useState(DEFAULT_FX)
@@ -56,10 +63,16 @@ export default function App() {
   const [lastAccountId, setLastAccountId] = useState(null)
 
   const reload = useCallback(async () => {
-    const [rs, cs, as] = await Promise.all([getAllTransactions(), getCategories(), getAccounts()])
+    const [rs, cs, as, bs] = await Promise.all([
+      getAllTransactions(),
+      getCategories(),
+      getAccounts(),
+      getBudgets(),
+    ])
     setRecords(rs)
     setCategories(cs)
     setAccounts(as)
+    setBudgets(bs)
   }, [])
 
   const sync = useSync(reload)
@@ -123,6 +136,20 @@ export default function App() {
   }, [accounts, priced, fx, currency])
 
   const monthRecords = useMemo(() => priced.filter((t) => t.month === month), [priced, month])
+
+  const budget = useMemo(
+    () =>
+      computeBudget({
+        records: monthRecords,
+        budgets,
+        categories,
+        month,
+        today: todayStr(),
+        fx,
+        home: currency,
+      }),
+    [monthRecords, budgets, categories, month, fx, currency]
+  )
   const expense = sumBy(monthRecords, 'expense')
   const income = sumBy(monthRecords, 'income')
   const balance = income - expense
@@ -208,6 +235,11 @@ export default function App() {
                 <div className="v">{formatAmount(income)}</div>
               </div>
             </div>
+            {budget.total && (
+              <div className="summary-budget">
+                <BudgetBar line={budget.total} currency={currency} />
+              </div>
+            )}
           </section>
 
           <Stats
@@ -218,6 +250,8 @@ export default function App() {
             accounts={accounts}
             currency={currency}
             missingRates={missingRates}
+            budget={budget}
+            onOpenBudget={() => setTab('budget')}
             onOpenSettings={() => setTab('settings')}
             onEdit={(t) => setEditing(t)}
           />
@@ -251,6 +285,31 @@ export default function App() {
               sync.scheduleSync()
               toast('账户已删除')
             }}
+          />
+        </>
+      )}
+
+      {tab === 'budget' && (
+        <>
+          <header className="topbar">
+            <button className="icon-btn" onClick={() => setTab('settings')} aria-label="返回">
+              ‹
+            </button>
+            <h1 className="page-title" style={{ flex: 1 }}>
+              预算
+            </h1>
+            <span style={{ width: 36 }} />
+          </header>
+          <BudgetSettings
+            budgets={budgets}
+            categories={categories}
+            currency={currency}
+            onSave={async (id, amount) => {
+              await saveBudget(id, amount, currency)
+              await reload()
+              sync.scheduleSync()
+            }}
+            onBack={() => setTab('settings')}
           />
         </>
       )}
@@ -290,6 +349,8 @@ export default function App() {
             }}
             lastBackup={lastBackup}
             onOpenCategories={() => setShowCategories(true)}
+            onOpenBudget={() => setTab('budget')}
+            budgetCount={budgets.length}
             onOpenImport={() => setShowImport(true)}
             onReload={async () => {
               setLastBackup(localStorage.getItem('lastBackup'))

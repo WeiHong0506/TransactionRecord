@@ -129,11 +129,36 @@ function accFromRemote(r) {
   }
 }
 
+export function budgetToRemote(b, userId) {
+  return {
+    id: b.id,
+    user_id: userId,
+    amount: b.amount ?? 0,
+    currency: b.currency ?? 'MYR',
+    created_at: createdOf(b),
+    updated_at: stampOf(b),
+    deleted_at: toIso(b.deletedAt),
+  }
+}
+
+function budgetFromRemote(r) {
+  return {
+    id: r.id,
+    amount: Number(r.amount ?? 0),
+    currency: r.currency ?? 'MYR',
+    createdAt: toMs(r.created_at),
+    updatedAt: toMs(r.updated_at),
+    deletedAt: toMs(r.deleted_at),
+  }
+}
+
 // 顺序有意义：账户和分类先上传，流水引用它们
 const TABLES = [
   { store: 'accounts', table: 'accounts', toRemote: accToRemote, fromRemote: accFromRemote },
   { store: 'categories', table: 'categories', toRemote: catToRemote, fromRemote: catFromRemote },
   { store: 'transactions', table: 'transactions', toRemote: txToRemote, fromRemote: txFromRemote },
+  // 预算放最后：它的 id 引用分类，分类先上去才不会出现悬空引用
+  { store: 'budgets', table: 'budgets', toRemote: budgetToRemote, fromRemote: budgetFromRemote },
 ]
 
 /* ---------------- 推送 ---------------- */

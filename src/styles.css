@@ -1843,3 +1843,150 @@ details.table-toggle[open] > summary::before {
 .pad-key.done:disabled {
   box-shadow: none;
 }
+
+/* ============ 预算 ============ */
+/* 状态同时靠颜色和文字表达——色觉障碍的人看不出红绿，但「超支 RM 120」谁都读得懂 */
+.summary-budget {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.bud-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bud-head,
+.bud-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bud-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.bud-name .e {
+  font-size: 14px;
+}
+
+.bud-num {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bud-num .sep,
+.bud-num .lim {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* 轨道满格即止：超出的量用数字讲，不画一根冲出容器的条 */
+.bud-track {
+  height: 7px;
+  border-radius: 4px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.bud-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+  transition: width 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bud-fill {
+    transition: none;
+  }
+}
+
+.bud-row[data-state='warn'] .bud-fill {
+  background: var(--series-4);
+}
+
+.bud-row[data-state='over'] .bud-fill {
+  background: var(--expense);
+}
+
+.bud-foot {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.bud-foot .over {
+  color: var(--expense);
+  font-weight: 600;
+}
+
+.bud-row[data-state='warn'] .bud-foot > :first-child {
+  color: var(--series-4);
+  font-weight: 600;
+}
+
+.bud-note {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* 分类预算列表 */
+.bud-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bud-empty {
+  display: block;
+  width: 100%;
+  text-align: center;
+  border: 1px dashed var(--border);
+  box-shadow: none;
+  background: none;
+}
+
+.link-btn {
+  font-size: 12.5px;
+  color: var(--accent);
+  padding: 0 2px;
+}
+
+/* 设置页里的预算输入 */
+.bud-item .li-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bud-input-wrap {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.bud-input-wrap .sym {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.bud-input {
+  width: 92px;
+  padding: 7px 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

@@ -4,7 +4,7 @@ import { clearAllData, exportAll, importAll } from '../db.js'
 import SyncPanel from './SyncPanel.jsx'
 
 // 改动代码时手动 +1。线上「关于」里会显示，用来确认部署的到底是哪一版。
-const APP_VERSION = 'v1.8.4'
+const APP_VERSION = 'v1.9.0'
 
 // iOS 的独立窗口模式里 <a download> 经常被吞掉，优先走系统分享面板
 async function deliverFile(content, filename, mime) {
@@ -31,6 +31,8 @@ export default function Settings({
   onThemeChange,
   lastBackup,
   onOpenCategories,
+  onOpenBudget,
+  budgetCount = 0,
   onOpenImport,
   onReload,
   toast,
@@ -165,6 +167,15 @@ export default function Settings({
             <span className="li-main">
               <span className="li-title">分类管理</span>
               <span className="li-sub">增删改分类、换图标和颜色</span>
+            </span>
+            <span className="li-right">›</span>
+          </button>
+          <button className="list-item" onClick={onOpenBudget}>
+            <span className="li-main">
+              <span className="li-title">预算</span>
+              <span className="li-sub">
+                {budgetCount > 0 ? `已设 ${budgetCount} 项上限` : '按月给自己定个上限'}
+              </span>
             </span>
             <span className="li-right">›</span>
           </button>

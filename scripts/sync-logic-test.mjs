@@ -117,5 +117,33 @@ check(
   upgraded.length > 0 && upgraded.every((c) => typeof c.createdAt === 'number')
 )
 
+console.log('\n[11] 预算也要参与同步')
+{
+  const { budgetToRemote } = await import('../src/sync.js')
+  const row = budgetToRemote(
+    { id: 'exp-food', amount: 800, currency: 'MYR', createdAt: 1, updatedAt: 2, deletedAt: null },
+    'user-1'
+  )
+  check('预算上传载荷带 user_id', row.user_id === 'user-1')
+  check('id 用的是分类 id，不是随机 UUID', row.id === 'exp-food', row.id)
+  check('金额和货币都在', row.amount === 800 && row.currency === 'MYR')
+  check('created_at 非空', typeof row.created_at === 'string' && row.created_at.length > 0)
+  check('updated_at 非空', typeof row.updated_at === 'string' && row.updated_at.length > 0)
+  check('未删除时 deleted_at 为 null', row.deleted_at === null)
+
+  const tomb = budgetToRemote(
+    { id: 'total', amount: 0, currency: 'MYR', createdAt: 1, updatedAt: 9, deletedAt: 9 },
+    'user-1'
+  )
+  check('清空预算是立墓碑而不是 amount=0', tomb.deleted_at !== null)
+
+  const db = await import('../src/db.js')
+  await db.saveBudget('exp-food', 800, 'MYR')
+  check('存得进去', (await db.getBudgets()).some((b) => b.id === 'exp-food' && b.amount === 800))
+  await db.saveBudget('exp-food', 0, 'MYR')
+  const after = await db.getBudgets()
+  check('清空后不再出现在列表里', !after.some((b) => b.id === 'exp-food'))
+}
+
 console.log(`\n${fail === 0 ? '✅' : '❌'} 通过 ${pass} 项，失败 ${fail} 项\n`)
 process.exit(fail === 0 ? 0 : 1)
