@@ -130,6 +130,8 @@ PWA 必须走 HTTPS，`github.io` 自带 HTTPS，直接满足。
 public/icons/                  PWA 图标（scripts/make-icons.py 生成）
 .env                           Supabase 连接参数（可公开，安全性靠 RLS）
 supabase-schema.sql            云端建表 + 行级安全策略（含 accounts 表，可重复执行）
+supabase-budgets.sql           v1.9.0 预算表迁移
+supabase-recurrings.sql        v1.10.0 固定支出表 + transactions.recurring_id
 src/
   import/
     pdfTable.js                PDF 表格还原：朝向判定、合并行、切列、处理折行
@@ -140,6 +142,9 @@ src/
   sync.js                      双向同步引擎：推送脏数据、增量拉取、冲突合并
   useSync.js                   登录状态与同步调度
   categories.js                默认分类与配色槽位
+  budget.js                    预算计算：进度、月份进度、可花日均（纯函数）
+  recurring.js                 固定支出：扣款日夹紧、已发生判定、可自由支配（纯函数）
+  compare.js                   和上月逐分类对比（纯函数）
   utils.js                     金额/日期格式化、汇总统计
   styles.css                   设计令牌与全部样式
   components/
@@ -154,12 +159,21 @@ src/
     Settings.jsx               偏好、备份、清空数据
     SyncPanel.jsx              账号与同步状态
     ImportSheet.jsx            对账单导入：预览、逐条确认、去重
+    BudgetSettings.jsx         预算上限设置
+    BudgetBar.jsx              预算进度条
+    RecurringSettings.jsx      固定支出登记与编辑
+    RecurringPanel.jsx         本月固定支出面板 + 可自由支配那一行
+    CompareSection.jsx         和上月对比
 scripts/
   make-icons.py                重新生成各尺寸图标
   smoke-test.mjs               生产构建冒烟测试（含离线验证）
   sync-logic-test.mjs          同步逻辑单元测试（冲突合并、墓碑、脏标记）
   make-sample-statement.py     生成结构相同的测试对账单 PDF（数据全是编的）
   import-test.mjs              对账单导入端到端测试
+  budget-test.mjs              预算计算单元测试
+  recurring-test.mjs           固定支出与月度对比单元测试
+  pad-test.mjs                 数字键盘运算与税费单元测试
+  fx-test.mjs                  多货币折算单元测试
 ```
 
 ### 配色说明

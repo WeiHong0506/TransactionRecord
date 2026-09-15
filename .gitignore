@@ -16,3 +16,7 @@ Thumbs.db
 .idea/
 *.log
 npm-debug.log*
+
+# 一次性的升级脚本，不进仓库
+apply-v*.bat
+v*-flat.zip

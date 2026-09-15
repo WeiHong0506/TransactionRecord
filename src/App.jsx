@@ -2,17 +2,20 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   deleteAccount,
   deleteCategory,
+  deleteRecurring,
   deleteTransaction,
   getAccounts,
   getAllTransactions,
   getBudgets,
   getCategories,
+  getRecurrings,
   getSetting,
   initAccounts,
   initCategories,
   saveAccount,
   saveBudget,
   saveCategory,
+  saveRecurring,
   saveTransaction,
   setSetting,
 } from './db.js'
@@ -37,7 +40,11 @@ import ImportSheet from './components/ImportSheet.jsx'
 import TabBar from './components/TabBar.jsx'
 import BudgetSettings from './components/BudgetSettings.jsx'
 import BudgetBar from './components/BudgetBar.jsx'
+import RecurringSettings from './components/RecurringSettings.jsx'
+import { DiscretionaryLine } from './components/RecurringPanel.jsx'
 import { computeBudget } from './budget.js'
+import { computeRecurring, discretionary, toTransaction } from './recurring.js'
+import { compareMonths } from './compare.js'
 import { useSync } from './useSync.js'
 
 export default function App() {
@@ -49,6 +56,7 @@ export default function App() {
   const [categories, setCategories] = useState([])
   const [accounts, setAccounts] = useState([])
   const [budgets, setBudgets] = useState([])
+  const [recurrings, setRecurrings] = useState([])
   // currency 现在的含义是「主货币」：所有折算后的数字都用它表示
   const [currency, setCurrency] = useState('MYR')
   const [fx, setFx] = useState(DEFAULT_FX)
@@ -63,16 +71,18 @@ export default function App() {
   const [lastAccountId, setLastAccountId] = useState(null)
 
   const reload = useCallback(async () => {
-    const [rs, cs, as, bs] = await Promise.all([
+    const [rs, cs, as, bs, fs] = await Promise.all([
       getAllTransactions(),
       getCategories(),
       getAccounts(),
       getBudgets(),
+      getRecurrings(),
     ])
     setRecords(rs)
     setCategories(cs)
     setAccounts(as)
     setBudgets(bs)
+    setRecurrings(fs)
   }, [])
 
   const sync = useSync(reload)
@@ -150,6 +160,30 @@ export default function App() {
       }),
     [monthRecords, budgets, categories, month, fx, currency]
   )
+  // 固定支出：本月哪几笔已经记了、哪几笔还欠着。
+  // 「已记」认的是流水上的 recurringId，不拿金额猜——猜错一次就少预留一千多。
+  const recurringSummary = useMemo(
+    () =>
+      computeRecurring({
+        recurrings,
+        records: monthRecords,
+        month,
+        today: todayStr(),
+        fx,
+        home: currency,
+      }),
+    [recurrings, monthRecords, month, fx, currency]
+  )
+
+  // 翻到过去的月份时不该再谈「预留」——那个月已经结束了，没有未来的扣款
+  const pendingReserve = month === currentMonth() ? recurringSummary.pendingTotal : 0
+  const freeToSpend = discretionary(budget.total, pendingReserve)
+
+  const compare = useMemo(
+    () => compareMonths(priced, month, categories),
+    [priced, month, categories]
+  )
+
   const expense = sumBy(monthRecords, 'expense')
   const income = sumBy(monthRecords, 'income')
   const balance = income - expense
@@ -165,6 +199,20 @@ export default function App() {
     }
     await reload()
     toast(record.id ? '已保存' : '已记一笔')
+    sync.scheduleSync()
+  }
+
+  /**
+   * 一键把某条固定支出记进流水。
+   *
+   * 走的是和手动记账完全相同的 saveTransaction，只是多带一个 recurringId；
+   * 所以它在明细、统计、预算里和普通记录没有任何区别——只是下次能认出「这笔扣过了」。
+   */
+  async function handleRecordRecurring(item) {
+    const fallback = item.accountId || lastAccountId || accounts[0]?.id
+    await saveTransaction(toTransaction(item, month, fallback))
+    await reload()
+    toast(`已记 ${item.name}`)
     sync.scheduleSync()
   }
 
@@ -238,6 +286,12 @@ export default function App() {
             {budget.total && (
               <div className="summary-budget">
                 <BudgetBar line={budget.total} currency={currency} />
+                <DiscretionaryLine
+                  value={freeToSpend}
+                  pendingTotal={pendingReserve}
+                  currency={currency}
+                  days={budget.progress?.left ?? 0}
+                />
               </div>
             )}
           </section>
@@ -251,6 +305,11 @@ export default function App() {
             currency={currency}
             missingRates={missingRates}
             budget={budget}
+            compare={compare}
+            recurring={recurringSummary}
+            recordableRecurring={isCurrentMonth}
+            onRecordRecurring={handleRecordRecurring}
+            onOpenRecurring={() => setTab('recurring')}
             onOpenBudget={() => setTab('budget')}
             onOpenSettings={() => setTab('settings')}
             onEdit={(t) => setEditing(t)}
@@ -314,6 +373,39 @@ export default function App() {
         </>
       )}
 
+      {tab === 'recurring' && (
+        <>
+          <header className="topbar">
+            <button className="icon-btn" onClick={() => setTab('settings')} aria-label="返回">
+              ‹
+            </button>
+            <h1 className="page-title" style={{ flex: 1 }}>
+              固定支出
+            </h1>
+            <span style={{ width: 36 }} />
+          </header>
+          <RecurringSettings
+            recurrings={recurrings}
+            categories={categories}
+            accounts={accounts}
+            currency={currency}
+            onSave={async (rec) => {
+              await saveRecurring(rec)
+              await reload()
+              sync.scheduleSync()
+              toast('已保存')
+            }}
+            onDelete={async (id) => {
+              await deleteRecurring(id)
+              await reload()
+              sync.scheduleSync()
+              toast('已删除')
+            }}
+            onBack={() => setTab('settings')}
+          />
+        </>
+      )}
+
       {tab === 'settings' && (
         <>
           <header className="topbar">
@@ -351,6 +443,8 @@ export default function App() {
             onOpenCategories={() => setShowCategories(true)}
             onOpenBudget={() => setTab('budget')}
             budgetCount={budgets.length}
+            onOpenRecurring={() => setTab('recurring')}
+            recurringCount={recurrings.filter((r) => r.active !== false).length}
             onOpenImport={() => setShowImport(true)}
             onReload={async () => {
               setLastBackup(localStorage.getItem('lastBackup'))

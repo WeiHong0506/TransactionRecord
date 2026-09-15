@@ -387,6 +387,87 @@ console.log(
   before.trim() === after.trim() ? '✓ 收入不抵扣预算' : `✗ 收入影响了预算：${before} → ${after}`
 )
 
+// —— 固定支出：登记 → 预算预留 → 一键记账 ——
+// 这个功能的全部价值在于「预算别撒谎」：月底还要扣 1200 房租的话，
+// 预算条上那个「还剩」就是虚的。所以下面验的不是列表长得对不对，
+// 而是那笔钱有没有真的从「可自由支配」里被扣掉。
+await page.click('.dock-tab:has-text("资产")')
+await page.waitForTimeout(300)
+await page.click('.icon-btn[aria-label="设置"]')
+await page.waitForSelector('.list-item:has-text("固定支出")')
+await page.click('.list-item:has-text("固定支出")')
+await page.waitForSelector('.list-item:has-text("房租")')
+await page.click('.list-item:has-text("房租")')
+await page.waitForSelector('.rec-form')
+await page.fill('.rec-amount-row input', '1200')
+await page.selectOption('.rec-day-row select', '28')
+// 预览必须当场显示下一次扣款日，而不是等保存后才知道设对没有
+const preview = (await page.textContent('.rec-preview')) ?? ''
+console.log(
+  preview.includes('-28') ? '✓ 编辑时就能看到下次扣款日' : `✗ 预览不对：${preview.trim()}`
+)
+await page.click('.list-item:has-text("添加")')
+await page.waitForSelector('.rec-amt')
+await shot('15-recurring-settings')
+const recRow = (await page.textContent('.card .list-item:has-text("房租")')) ?? ''
+console.log(
+  recRow.includes('1,200.00') && recRow.includes('28')
+    ? '✓ 固定支出已登记'
+    : `✗ 登记结果不对：${recRow.replace(/\s+/g, ' ').trim()}`
+)
+
+// 预算条下面必须多出「预留 … 之后」那一行，且把 1200 扣掉了
+await page.click('.dock-tab:has-text("统计")')
+await page.waitForSelector('.summary-budget .disc-line')
+const disc = await page.evaluate(() => {
+  const el = document.querySelector('.disc-line')
+  return { state: el.dataset.state, text: el.textContent.replace(/\s+/g, ' ').trim() }
+})
+console.log(
+  disc.text.includes('1,200.00') && disc.text.includes('预留')
+    ? '✓ 未发生的固定支出已从可自由支配里预留出来'
+    : `✗ 预留行不对：${JSON.stringify(disc)}`
+)
+
+// 面板里点「记一笔」，应当写进流水并把这条标成已记
+await page.click('.view-tabs button:has-text("分类构成")')
+await page.waitForSelector('.rec-item')
+await shot('16-recurring-pending')
+const beforeState = await page.getAttribute('.rec-item', 'data-state')
+await page.click('.rec-btn')
+await page.waitForTimeout(700)
+const afterState = await page.getAttribute('.rec-item', 'data-state')
+console.log(
+  beforeState === 'due' && afterState === 'paid'
+    ? '✓ 一键记账后状态变为已记'
+    : `✗ 状态没变：${beforeState} → ${afterState}`
+)
+// 已经发生的钱不该再被预留一次，否则同一笔房租扣了两遍
+const discGone = (await page.locator('.disc-line').count()) === 0
+console.log(discGone ? '✓ 记过之后不再重复预留' : '✗ 已记的固定支出仍在预留')
+// 而且它必须是一笔普通流水，在明细里看得到
+await page.click('.view-tabs button:has-text("明细")')
+await page.waitForTimeout(300)
+const inList = (await page.locator('.row:has-text("房租")').count()) > 0
+console.log(inList ? '✓ 一键记的账进了明细，和手记的没区别' : '✗ 明细里找不到这笔')
+
+// —— 和上月对比 ——
+// 没有上月数据时不该编一个百分比出来，而要老实说「不可比」
+await page.click('.view-tabs button:has-text("分类构成")')
+await page.waitForSelector('.cmp-hero, .section:has-text("和上月对比") .empty')
+const cmp = await page.evaluate(() => {
+  const hero = document.querySelector('.cmp-hero')
+  if (hero) return { kind: 'hero', text: hero.textContent.replace(/\s+/g, ' ').trim() }
+  const empty = document.querySelector('.section:has(h2) .empty')
+  return { kind: 'empty', text: empty ? empty.textContent.replace(/\s+/g, ' ').trim() : '' }
+})
+console.log(
+  cmp.kind === 'empty' || (cmp.kind === 'hero' && !cmp.text.includes('Infinity'))
+    ? `✓ 上月对比渲染正常（${cmp.kind}）`
+    : `✗ 对比区块不对：${JSON.stringify(cmp)}`
+)
+await shot('14-recurring-compare')
+
 // —— 汇率输入：逐字符敲，0 和小数点都必须留得住 ——
 // 这个曾经是坏的：输入框的值从已存数字反推，按下 0 的瞬间就被当成清空。
 await page.click('.dock-tab:has-text("资产")')

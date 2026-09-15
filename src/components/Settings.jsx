@@ -4,7 +4,7 @@ import { clearAllData, exportAll, importAll } from '../db.js'
 import SyncPanel from './SyncPanel.jsx'
 
 // 改动代码时手动 +1。线上「关于」里会显示，用来确认部署的到底是哪一版。
-const APP_VERSION = 'v1.9.2'
+const APP_VERSION = 'v1.10.0'
 
 // iOS 的独立窗口模式里 <a download> 经常被吞掉，优先走系统分享面板
 async function deliverFile(content, filename, mime) {
@@ -33,6 +33,8 @@ export default function Settings({
   onOpenCategories,
   onOpenBudget,
   budgetCount = 0,
+  onOpenRecurring,
+  recurringCount = 0,
   onOpenImport,
   onReload,
   toast,
@@ -175,6 +177,17 @@ export default function Settings({
               <span className="li-title">预算</span>
               <span className="li-sub">
                 {budgetCount > 0 ? `已设 ${budgetCount} 项上限` : '按月给自己定个上限'}
+              </span>
+            </span>
+            <span className="li-right">›</span>
+          </button>
+          <button className="list-item" onClick={onOpenRecurring}>
+            <span className="li-main">
+              <span className="li-title">固定支出</span>
+              <span className="li-sub">
+                {recurringCount > 0
+                  ? `已登记 ${recurringCount} 项，预算会为它们预留`
+                  : '房租、电话费这类每月必扣的钱'}
               </span>
             </span>
             <span className="li-right">›</span>

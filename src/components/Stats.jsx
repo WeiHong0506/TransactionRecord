@@ -5,6 +5,8 @@ import CalendarView from './CalendarView.jsx'
 import TransactionList from './TransactionList.jsx'
 import ListFilter, { EMPTY_FILTER, applyFilter, isFiltered } from './ListFilter.jsx'
 import BudgetBar from './BudgetBar.jsx'
+import RecurringPanel from './RecurringPanel.jsx'
+import CompareSection from './CompareSection.jsx'
 import {
   formatAmount,
   homeAmountOf,
@@ -24,6 +26,11 @@ export default function Stats({
   currency,
   missingRates = [],
   budget,
+  compare,
+  recurring,
+  recordableRecurring = true,
+  onRecordRecurring,
+  onOpenRecurring,
   onOpenBudget,
   onOpenSettings,
   onEdit,
@@ -172,6 +179,19 @@ export default function Stats({
         </div>
       </div>
 
+      {type === 'expense' && <CompareSection compare={compare} currency={currency} month={month} />}
+
+      {type === 'expense' && (
+        <RecurringPanel
+          summary={recurring}
+          categories={categories}
+          currency={currency}
+          recordable={recordableRecurring}
+          onRecord={onRecordRecurring}
+          onOpenSettings={onOpenRecurring}
+        />
+      )}
+
       {type === 'expense' && (
         <div className="section">
           <div className="section-head">
@@ -214,6 +234,14 @@ export default function Stats({
             <Line k="有支出的天数" v={`${dayCount} 天`} />
             <Line k="日均支出（按有记录的天）" v={formatMoney(avg, currency)} />
             <Line k="本月记录笔数" v={`${monthRecords.length} 笔`} />
+            <Line
+              k="支出比上月"
+              v={
+                compare?.comparable
+                  ? `${compare.totalDelta >= 0 ? '+' : '−'} ${formatMoney(compare.totalDelta, currency)}`
+                  : '—'
+              }
+            />
             <Line
               k="最大单笔支出"
               v={

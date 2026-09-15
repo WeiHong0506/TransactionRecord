@@ -45,6 +45,7 @@ export function txToRemote(r, userId) {
     currency: r.currency ?? 'MYR',
     note: r.note ?? '',
     date: r.date,
+    recurring_id: r.recurringId ?? null,
     created_at: createdOf(r),
     updated_at: stampOf(r),
     deleted_at: toIso(r.deletedAt),
@@ -63,6 +64,8 @@ function txFromRemote(r) {
     note: r.note ?? '',
     date: r.date,
     month: String(r.date).slice(0, 7),
+    // 老客户端上传的流水没有这一列，缺就是 null——不是某条固定支出的实例
+    recurringId: r.recurring_id ?? null,
     createdAt: toMs(r.created_at),
     updatedAt: toMs(r.updated_at),
     deletedAt: toMs(r.deleted_at),
@@ -152,10 +155,50 @@ function budgetFromRemote(r) {
   }
 }
 
+export function recToRemote(r, userId) {
+  return {
+    id: r.id,
+    user_id: userId,
+    name: r.name ?? '',
+    amount: r.amount ?? 0,
+    currency: r.currency ?? 'MYR',
+    category_id: r.categoryId ?? null,
+    account_id: r.accountId ?? null,
+    cycle: r.cycle === 'yearly' ? 'yearly' : 'monthly',
+    day: r.day ?? 1,
+    // 只有年付才有月份；每月一次的存 null，语义比存 0 清楚
+    month: r.cycle === 'yearly' ? (r.month ?? 1) : null,
+    active: r.active !== false,
+    created_at: createdOf(r),
+    updated_at: stampOf(r),
+    deleted_at: toIso(r.deletedAt),
+  }
+}
+
+function recFromRemote(r) {
+  return {
+    id: r.id,
+    name: r.name ?? '',
+    amount: Number(r.amount ?? 0),
+    currency: r.currency ?? 'MYR',
+    categoryId: r.category_id ?? null,
+    accountId: r.account_id ?? null,
+    cycle: r.cycle === 'yearly' ? 'yearly' : 'monthly',
+    day: Number(r.day ?? 1),
+    month: r.month == null ? null : Number(r.month),
+    active: r.active !== false,
+    createdAt: toMs(r.created_at),
+    updatedAt: toMs(r.updated_at),
+    deletedAt: toMs(r.deleted_at),
+  }
+}
+
 // 顺序有意义：账户和分类先上传，流水引用它们
 const TABLES = [
   { store: 'accounts', table: 'accounts', toRemote: accToRemote, fromRemote: accFromRemote },
   { store: 'categories', table: 'categories', toRemote: catToRemote, fromRemote: catFromRemote },
+  // 固定支出排在流水前面：流水的 recurring_id 指着它
+  { store: 'recurrings', table: 'recurrings', toRemote: recToRemote, fromRemote: recFromRemote },
   { store: 'transactions', table: 'transactions', toRemote: txToRemote, fromRemote: txFromRemote },
   // 预算放最后：它的 id 引用分类，分类先上去才不会出现悬空引用
   { store: 'budgets', table: 'budgets', toRemote: budgetToRemote, fromRemote: budgetFromRemote },

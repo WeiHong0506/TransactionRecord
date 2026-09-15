@@ -1428,7 +1428,8 @@ select.input {
   border-top: 1px solid var(--border);
 }
 
-.list-item .li-main {
+.list-item .li-main,
+.rec-item .li-main {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -1436,13 +1437,15 @@ select.input {
   gap: 1px;
 }
 
-.list-item .li-title {
+.list-item .li-title,
+.rec-item .li-title {
   display: block;
   font-size: 14.5px;
   line-height: 1.35;
 }
 
-.list-item .li-sub {
+.list-item .li-sub,
+.rec-item .li-sub {
   display: block;
   font-size: 12px;
   color: var(--text-muted);
@@ -1989,4 +1992,269 @@ details.table-toggle[open] > summary::before {
   padding: 7px 10px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* ============ 固定支出 ============ */
+/* 登记在这里的钱是「跑不掉的」——界面的任务是让这句话在预算里看得见 */
+
+.rec-list {
+  padding: 2px 0;
+}
+
+.rec-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rec-item:last-child {
+  border-bottom: none;
+}
+
+/* 状态用符号 + 颜色 + 文字三层表达。色觉障碍看不出红绿，
+   但「已过扣款日，还没记」这几个字谁都读得懂。 */
+.rec-mark {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--border);
+  color: var(--text-muted);
+}
+
+.rec-item[data-state='paid'] .rec-mark {
+  background: color-mix(in srgb, var(--series-3) 20%, var(--surface));
+  color: var(--series-3);
+}
+
+.rec-item[data-state='overdue'] .rec-mark {
+  background: color-mix(in srgb, var(--danger) 16%, var(--surface));
+  color: var(--danger);
+}
+
+.rec-item .li-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rec-item[data-state='paid'] .li-title {
+  color: var(--text-secondary);
+}
+
+.rec-right {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.rec-amt {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rec-btn {
+  font-size: 12px;
+  font-weight: 550;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  white-space: nowrap;
+}
+
+.rec-foot {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  padding: 10px 4px 0;
+}
+
+.rec-off {
+  font-size: 11px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 6px;
+  font-weight: 400;
+}
+
+.rec-form .field:first-child {
+  margin-top: 0;
+}
+
+.rec-amount-row,
+.rec-day-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rec-amount-row .sym {
+  font-size: 13px;
+  color: var(--text-muted);
+  flex: none;
+}
+
+.rec-cur {
+  width: auto;
+  flex: none;
+  padding: 11px 8px;
+}
+
+.rec-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rec-toggle input {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.rec-preview {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 可自由支配：预算条下面那一行，才是「今天真能花多少」 */
+.disc-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.disc-k {
+  color: var(--text-secondary);
+}
+
+.disc-v {
+  font-weight: 600;
+}
+
+.disc-line[data-state='over'] .disc-v {
+  color: var(--danger);
+}
+
+.disc-v .per-day {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+/* ============ 和上月对比 ============ */
+
+.cmp-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cmp-hero-v {
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 涨= 支出色，跌= 收入色。和首页那对收支颜色保持同一套语义，
+   不另发明一套红绿，否则同一个红在两个地方意思不一样。 */
+.cmp-hero[data-dir='up'] .cmp-hero-v {
+  color: var(--expense);
+}
+
+.cmp-hero[data-dir='down'] .cmp-hero-v {
+  color: var(--income);
+}
+
+.cmp-hero-k {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmp-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.cmp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.cmp-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.cmp-name .e {
+  font-size: 15px;
+}
+
+.cmp-nums {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+
+.cmp-delta {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cmp-row[data-dir='up'] .cmp-delta {
+  color: var(--expense);
+}
+
+.cmp-row[data-dir='down'] .cmp-delta {
+  color: var(--income);
+}
+
+.cmp-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cmp-none {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
 }

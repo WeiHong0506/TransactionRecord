@@ -145,5 +145,68 @@ console.log('\n[11] 预算也要参与同步')
   check('清空后不再出现在列表里', !after.some((b) => b.id === 'exp-food'))
 }
 
+console.log('\n[12] 固定支出与它在流水上的标记')
+{
+  const { recToRemote, txToRemote } = await import('../src/sync.js')
+  const db = await import('../src/db.js')
+
+  const saved = await db.saveRecurring({
+    name: '房租',
+    amount: 1200,
+    currency: 'MYR',
+    categoryId: 'exp-housing',
+    cycle: 'monthly',
+    // 存的是原始设定 31，不能被夹到 28——否则 2 月过一次之后就再也回不去了
+    day: 31,
+  })
+  check('31 号原样存下，不在写库时夹紧', saved.day === 31, String(saved.day))
+  check('每月一次时 month 是 null', saved.month === null, String(saved.month))
+  check('默认启用', saved.active === true)
+  check('读得回来', (await db.getRecurrings()).some((r) => r.id === saved.id))
+
+  const row = recToRemote(saved, 'user-1')
+  check('上传载荷带 user_id', row.user_id === 'user-1')
+  check('周期和扣款日都在', row.cycle === 'monthly' && row.day === 31)
+  check('每月一次的 month 发 null，不发 0', row.month === null, String(row.month))
+  check('created_at / updated_at 都非空', Boolean(row.created_at && row.updated_at))
+  check('未删除时 deleted_at 为 null', row.deleted_at === null)
+
+  const yearly = recToRemote(
+    { id: 'y', name: '车险', amount: 900, cycle: 'yearly', month: 3, day: 15, updatedAt: 1 },
+    'user-1'
+  )
+  check('年付才带月份', yearly.month === 3)
+
+  // 一键记账写出来的流水必须带 recurring_id，否则下个月认不出「这笔扣过了」，
+  // 预算会把同一笔房租再预留一次。
+  const tx = await db.saveTransaction({
+    type: 'expense',
+    amount: 1200,
+    currency: 'MYR',
+    categoryId: 'exp-housing',
+    accountId: 'acc-cash',
+    date: '2026-09-28',
+    recurringId: saved.id,
+  })
+  check('流水上留下了来源标记', tx.recurringId === saved.id)
+  check('上传时映射成 recurring_id', txToRemote(tx, 'user-1').recurring_id === saved.id)
+
+  const plain = await db.saveTransaction({
+    type: 'expense',
+    amount: 12,
+    currency: 'MYR',
+    categoryId: 'exp-food',
+    accountId: 'acc-cash',
+    date: '2026-09-02',
+  })
+  check('普通记账的标记是 null，不是 undefined', plain.recurringId === null)
+  check('null 也要如实发上去', txToRemote(plain, 'user-1').recurring_id === null)
+
+  await db.deleteRecurring(saved.id)
+  check('删除是立墓碑，列表里不再出现', !(await db.getRecurrings()).some((r) => r.id === saved.id))
+  const stillThere = (await db.getAllTransactions()).some((t) => t.id === tx.id)
+  check('删掉固定支出不会连带删掉已经记过的流水', stillThere)
+}
+
 console.log(`\n${fail === 0 ? '✅' : '❌'} 通过 ${pass} 项，失败 ${fail} 项\n`)
 process.exit(fail === 0 ? 0 : 1)

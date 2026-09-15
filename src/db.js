@@ -12,7 +12,9 @@ const DB_NAME = 'transaction-record'
 // v8：新增默认分类「旅行」，并把「其他」挪到它后面
 // v9：预算。单独一张表而不是塞进 settings——settings 不参与同步，
 //     而预算必须跨设备一致，不然手机上设了笔记本上看不到
-const DB_VERSION = 9
+// v10：固定支出（房租、电话费、停车月票）。流水上多一个 recurringId，
+//      用来精确判断「这个月这笔扣过了没有」——不靠金额猜，猜错一次就少预留一千多
+const DB_VERSION = 10
 
 let dbPromise = null
 
@@ -110,6 +112,13 @@ function getDB() {
           // 预算：id 就是 'total' 或分类 id，天然幂等，两台设备同时改也能靠 LWW 收敛
           if (!db.objectStoreNames.contains('budgets')) {
             db.createObjectStore('budgets', { keyPath: 'id' })
+          }
+        }
+        if (oldVersion < 10) {
+          // 固定支出。老流水没有 recurringId，不用回填——
+          // 缺这个字段就等于「不是某条固定支出的实例」，正是事实。
+          if (!db.objectStoreNames.contains('recurrings')) {
+            db.createObjectStore('recurrings', { keyPath: 'id' })
           }
         }
         if (oldVersion < 8 && oldVersion >= 1) {
@@ -234,6 +243,48 @@ export async function saveBudget(id, amount, currency) {
   return row
 }
 
+/* ---------------- 固定支出 ---------------- */
+
+export async function getRecurrings() {
+  const db = await getDB()
+  const all = await db.getAll('recurrings')
+  return all.filter(alive).sort((a, b) => (a.day ?? 1) - (b.day ?? 1))
+}
+
+export async function saveRecurring(rec) {
+  const db = await getDB()
+  const now = Date.now()
+  const full = {
+    ...rec,
+    id: rec.id || newId(),
+    name: rec.name ?? '',
+    amount: Math.round(Number(rec.amount || 0) * 100) / 100,
+    currency: rec.currency || 'MYR',
+    cycle: rec.cycle === 'yearly' ? 'yearly' : 'monthly',
+    // 存的是 1–31 的原始设定，不在这里夹紧——夹紧是「在某个具体月份」才有意义的事。
+    // 存成 28 的话，2 月过后就再也回不到 31 了。
+    day: Math.min(31, Math.max(1, Number(rec.day) || 1)),
+    month: rec.cycle === 'yearly' ? Math.min(12, Math.max(1, Number(rec.month) || 1)) : null,
+    active: rec.active !== false,
+    createdAt: rec.createdAt ?? now,
+    updatedAt: now,
+    deletedAt: rec.deletedAt ?? null,
+    dirty: 1,
+  }
+  await db.put('recurrings', full)
+  return full
+}
+
+// 软删除。已经记进去的流水不动——那些钱是真花掉的，
+// 只是以后不会再有人提醒你这笔要扣。
+export async function deleteRecurring(id) {
+  const db = await getDB()
+  const row = await db.get('recurrings', id)
+  if (!row) return
+  const now = Date.now()
+  await db.put('recurrings', { ...row, deletedAt: now, updatedAt: now, dirty: 1 })
+}
+
 /* ---------------- 资金账户 ---------------- */
 
 // 账户为空时补上默认账户（例如换云端账号后云端没有账户数据的情况）
@@ -299,6 +350,8 @@ export async function saveTransaction(record) {
     // 抄一份账户的货币存下来，而不是每次回查账户：
     // 这样以后账户改名换币，历史记录仍然记得自己当初是用什么钱付的
     currency: record.currency || 'MYR',
+    // 来自哪条固定支出。普通记账是 null，一键记账时才有值。
+    recurringId: record.recurringId ?? null,
     createdAt: record.createdAt ?? now,
     updatedAt: now,
     deletedAt: record.deletedAt ?? null,
@@ -387,7 +440,7 @@ export async function mergeRemote(storeName, remoteRows) {
 export async function purgeTombstones(maxAgeMs = 30 * 24 * 3600 * 1000) {
   const db = await getDB()
   const cutoff = Date.now() - maxAgeMs
-  for (const name of ['transactions', 'categories', 'accounts', 'budgets']) {
+  for (const name of ['transactions', 'categories', 'accounts', 'budgets', 'recurrings']) {
     const tx = db.transaction(name, 'readwrite')
     const all = await tx.store.getAll()
     for (const r of all) {
@@ -401,21 +454,23 @@ export async function purgeTombstones(maxAgeMs = 30 * 24 * 3600 * 1000) {
 
 export async function exportAll() {
   const db = await getDB()
-  const [transactions, categories, accounts, budgets, settings] = await Promise.all([
+  const [transactions, categories, accounts, budgets, recurrings, settings] = await Promise.all([
     db.getAll('transactions'),
     db.getAll('categories'),
     db.getAll('accounts'),
     db.getAll('budgets'),
+    db.getAll('recurrings'),
     db.getAll('settings'),
   ])
   return {
     format: 'transaction-record-backup',
-    version: 3,
+    version: 4,
     exportedAt: new Date().toISOString(),
     transactions: transactions.filter(alive),
     categories: categories.filter(alive),
     accounts: accounts.filter(alive),
     budgets: budgets.filter(alive),
+    recurrings: recurrings.filter(alive),
     settings: settings.filter((s) => !String(s.key).startsWith('sync.')),
   }
 }
@@ -427,7 +482,7 @@ export async function importAll(data, mode = 'merge') {
   const db = await getDB()
   const now = Date.now()
   const tx = db.transaction(
-    ['transactions', 'categories', 'accounts', 'budgets', 'settings'],
+    ['transactions', 'categories', 'accounts', 'budgets', 'recurrings', 'settings'],
     'readwrite'
   )
   if (mode === 'replace') {
@@ -436,6 +491,7 @@ export async function importAll(data, mode = 'merge') {
       tx.objectStore('categories').clear(),
       tx.objectStore('accounts').clear(),
       tx.objectStore('budgets').clear(),
+      tx.objectStore('recurrings').clear(),
     ])
   }
   for (const a of data.accounts || []) {
@@ -473,6 +529,15 @@ export async function importAll(data, mode = 'merge') {
       dirty: 1,
     })
   }
+  // version 3 及更早的备份没有 recurrings
+  for (const r of data.recurrings || []) {
+    tx.objectStore('recurrings').put({
+      ...r,
+      updatedAt: now,
+      deletedAt: r.deletedAt ?? null,
+      dirty: 1,
+    })
+  }
   for (const s of data.settings || []) tx.objectStore('settings').put(s)
   await tx.done
   return (data.transactions || []).length
@@ -487,9 +552,12 @@ export async function importAll(data, mode = 'merge') {
 export async function clearAllData() {
   const db = await getDB()
   const now = Date.now()
-  const tx = db.transaction(['transactions', 'categories', 'accounts', 'budgets'], 'readwrite')
+  const tx = db.transaction(
+    ['transactions', 'categories', 'accounts', 'budgets', 'recurrings'],
+    'readwrite'
+  )
 
-  for (const name of ['transactions', 'categories', 'accounts', 'budgets']) {
+  for (const name of ['transactions', 'categories', 'accounts', 'budgets', 'recurrings']) {
     const store = tx.objectStore(name)
     const all = await store.getAll()
     for (const r of all) {
@@ -520,12 +588,16 @@ export async function clearAllData() {
 // 切换账号时：清空本地并重新从云端拉全量
 export async function resetForNewAccount() {
   const db = await getDB()
-  const tx = db.transaction(['transactions', 'categories', 'accounts', 'budgets'], 'readwrite')
+  const tx = db.transaction(
+    ['transactions', 'categories', 'accounts', 'budgets', 'recurrings'],
+    'readwrite'
+  )
   await Promise.all([
     tx.objectStore('transactions').clear(),
     tx.objectStore('categories').clear(),
     tx.objectStore('accounts').clear(),
     tx.objectStore('budgets').clear(),
+    tx.objectStore('recurrings').clear(),
   ])
   await tx.done
 }
