@@ -399,12 +399,29 @@ await page.click('.list-item:has-text("固定支出")')
 await page.waitForSelector('.list-item:has-text("房租")')
 await page.click('.list-item:has-text("房租")')
 await page.waitForSelector('.rec-form')
+// 金额框曾经被压成 28px 宽的一条缝：.input 带着 width:100% 进了 flex 行，
+// 三个子元素互相抢空间，货币下拉还溢出屏幕。点不中，输进去也看不见。
+const amtBox = await page.locator('.rec-amount-row input').boundingBox()
+console.log(
+  amtBox && amtBox.width >= 140
+    ? `✓ 金额输入框宽度够用（${Math.round(amtBox.width)}px）`
+    : `✗ 金额框被挤扁：${JSON.stringify(amtBox)}`
+)
+// 一个 label 只能管一个控件。包了两个的话，点击会转发给「第一个可聚焦控件」，
+// iOS 上点金额会弹出货币选择轮，永远输不了数字。
+const badLabels = await page.evaluate(() =>
+  [...document.querySelectorAll('.rec-form label')]
+    .map((l) => [...l.querySelectorAll('input,select,textarea')].length)
+    .filter((n) => n > 1).length
+)
+console.log(badLabels === 0 ? '✓ 没有一个 label 同时管两个控件' : `✗ 有 ${badLabels} 个 label 包了多个控件`)
+
 await page.fill('.rec-amount-row input', '1200')
 await page.selectOption('.rec-day-row select', '28')
 // 预览必须当场显示下一次扣款日，而不是等保存后才知道设对没有
 const preview = (await page.textContent('.rec-preview')) ?? ''
 console.log(
-  preview.includes('-28') ? '✓ 编辑时就能看到下次扣款日' : `✗ 预览不对：${preview.trim()}`
+  preview.includes('28日') ? '✓ 编辑时就能看到下次扣款日' : `✗ 预览不对：${preview.trim()}`
 )
 await page.click('.list-item:has-text("添加")')
 await page.waitForSelector('.rec-amt')
@@ -467,6 +484,73 @@ console.log(
     : `✗ 对比区块不对：${JSON.stringify(cmp)}`
 )
 await shot('14-recurring-compare')
+
+// —— 收据截图导入（粘贴文字这条路，不跑 OCR） ——
+// 这里验的是最要命的一件事：一张收据上有付款金额、手续费、钱包余额三个数字，
+// 挑错任何一个都会往账本里塞一笔你一个月后完全对不上的假账。
+await page.click('.dock-tab:has-text("资产")')
+await page.waitForTimeout(300)
+await page.click('.icon-btn[aria-label="设置"]')
+await page.waitForSelector('.list-item:has-text("导入收据截图")')
+await page.click('.list-item:has-text("导入收据截图")')
+await page.waitForSelector('.rcp')
+await page.click('.list-item:has-text("Touch")')
+await page.waitForSelector('.rcp-text')
+
+const RECEIPT = [
+  "Touch 'n Go eWallet",
+  'Payment Successful',
+  'RM 12.50',
+  'Paid to',
+  'ZUS Coffee Mid Valley',
+  'Transaction Date',
+  '15 Sep 2026, 10:23 AM',
+  'Reference ID',
+  'TNG20260915102311887',
+  'Wallet Balance',
+  'RM 238.75',
+].join('\n')
+
+await page.fill('.rcp-text', RECEIPT)
+await page.click('.btn:has-text("解析这段文字")')
+await page.waitForSelector('.rcp-verdict')
+await shot('17-receipt-review')
+
+const got = await page.evaluate(() => ({
+  amount: document.querySelector('#rcp-amount')?.value,
+  date: document.querySelector('#rcp-date')?.value,
+  note: document.querySelector('#rcp-note')?.value,
+  verdict: document.querySelector('.rcp-verdict')?.dataset.level,
+  cat: document.querySelector('.cat-chip[aria-pressed="true"]')?.textContent?.trim(),
+  src: document.querySelector('.rcp-src')?.textContent ?? '',
+}))
+console.log(
+  got.amount === '12.50' ? '✓ 挑的是付款金额 12.50，不是钱包余额 238.75' : `✗ 金额挑错了：${got.amount}`
+)
+console.log(got.date === '2026-09-15' ? '✓ 日期认对' : `✗ 日期不对：${got.date}`)
+console.log(got.note === 'ZUS Coffee Mid Valley' ? '✓ 商户名认对' : `✗ 商户不对：${got.note}`)
+console.log(/餐饮/.test(got.cat ?? '') ? '✓ 自动归到餐饮' : `✗ 分类不对：${got.cat}`)
+console.log(got.verdict === 'high' ? '✓ 标为高可信' : `✗ 可信度：${got.verdict}`)
+// 不给依据的话，让人核对就只是让人重新猜一遍
+console.log(got.src.includes('12.50') ? '✓ 把「认自哪一行」摆出来了' : `✗ 没给依据：${got.src}`)
+// 参考号可能夹带账号片段，绝不能进备注
+console.log(
+  !got.note.includes('TNG2026') ? '✓ 参考号没混进备注' : `✗ 参考号进了备注：${got.note}`
+)
+
+// 必须是点了保存才落库，不能自动存
+const beforeSave = await page.locator('.rcp-verdict').count()
+console.log(beforeSave === 1 ? '✓ 停在预览等确认，没有自动保存' : '✗ 预览没停住')
+await page.click('.btn:has-text("保存")')
+await page.waitForTimeout(700)
+// 保存后还停在设置页，明细要回统计页才看得到
+await page.click('.dock-tab:has-text("统计")')
+await page.waitForTimeout(400)
+const landed = await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('.row')]
+  return rows.some((r) => r.textContent.includes('ZUS Coffee'))
+})
+console.log(landed ? '✓ 确认后这一笔进了明细' : '✗ 保存后明细里找不到')
 
 // —— 汇率输入：逐字符敲，0 和小数点都必须留得住 ——
 // 这个曾经是坏的：输入框的值从已存数字反推，按下 0 的瞬间就被当成清空。

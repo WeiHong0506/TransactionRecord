@@ -1,4 +1,5 @@
 import { extractTable } from './pdfTable.js'
+import { guessCategory, stripIds } from './merchants.js'
 
 export { PdfPasswordError } from './pdfTable.js'
 
@@ -29,22 +30,6 @@ function parseDate(s) {
   if (!m) return null
   const [, d, mo, y] = m
   return `${y}-${String(Number(mo)).padStart(2, '0')}-${String(Number(d)).padStart(2, '0')}`
-}
-
-/**
- * 清掉流水号。
- *
- * Reference / Details 两列全是十几二十位的交易流水号，对记账毫无意义。
- * 我们本来就不读那两列，但列边界会漂——真实账单里已经出现过
- * 类型列把 Reference 的一截吃进去（`DuitNow QR TNGD 20260816101`）。
- * 所以在字段层面再清一道：凡是 8 位以上、含数字的连续串一律去掉。
- * 商户名里几乎不会出现这种东西（「99 Speedmart」「7-Eleven」都很短）。
- */
-function stripIds(s) {
-  return String(s ?? '')
-    .replace(/\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{8,}\b/g, ' ')
-    .replace(/\s{2,}/g, ' ')
-    .trim()
 }
 
 function parseAmount(s) {
@@ -87,30 +72,6 @@ function classify(type) {
     if (r.re.test(norm)) return r
   }
   return { action: 'unknown', why: '未知类型，请确认' }
-}
-
-// 马来西亚常见商户 → 分类。命中靠的是描述里的商户名。
-const MERCHANT_RULES = [
-  ['exp-food', /mixue|mcdonald|kfc|starbucks|zus|tealive|chagee|foodpanda|grabfood|restoran|restaurant|kopitiam|cafe|bakery|nasi|pizza|habib|huamui|secret recipe|oldtown|texas chicken|subway|domino|f&b|makan|corner/i],
-  ['exp-transport', /grab(?!food)|rapid|mrt|lrt|ktm|shell|petronas|petron|caltex|bhp|parking|smart\s*tag|toll|myrapid|airasia|ets/i],
-  ['exp-shopping', /shopee|lazada|mydin|aeon|tesco|lotus|giant|econsave|uniqlo|padini|decathlon|ikea|nsk/i],
-  ['exp-daily', /7[\s-]*eleven|kk\s*super|familymart|99\s*speed|speedmart|watson|guardian|caring|mr\.?\s*diy/i],
-  ['exp-fun', /gsc|tgv|mbo|cinema|netflix|spotify|steam|playstation|karaoke|golf|gym/i],
-  ['exp-health', /clinic|klinik|pharmacy|farmasi|hospital|dental|dentist|medical/i],
-  ['exp-housing', /tnb|syabas|air\s*selangor|indah\s*water|unifi|maxis|celcom|digi|umobile|astro|time\s*fibre|yes\s*4g/i],
-  ['exp-edu', /tuition|academy|udemy|coursera|bookstore|popular\b|mph\b/i],
-]
-
-function guessCategory(description, learned) {
-  const text = String(description || '')
-  // 用户自己教过的规则优先——它比内置列表更懂你的消费
-  for (const [kw, catId] of Object.entries(learned || {})) {
-    if (kw && text.toLowerCase().includes(kw.toLowerCase())) return catId
-  }
-  for (const [catId, re] of MERCHANT_RULES) {
-    if (re.test(text)) return catId
-  }
-  return null
 }
 
 /** 同一笔记录的指纹，用来防止同一个文件导两次 */

@@ -37,6 +37,7 @@ import Stats from './components/Stats.jsx'
 import Settings from './components/Settings.jsx'
 import AccountsPage from './components/AccountsPage.jsx'
 import ImportSheet from './components/ImportSheet.jsx'
+import ReceiptSheet from './components/ReceiptSheet.jsx'
 import TabBar from './components/TabBar.jsx'
 import BudgetSettings from './components/BudgetSettings.jsx'
 import BudgetBar from './components/BudgetBar.jsx'
@@ -66,9 +67,13 @@ export default function App() {
   const [editing, setEditing] = useState(null)
   const [showCategories, setShowCategories] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showReceipt, setShowReceipt] = useState(false)
   const [toastMsg, setToastMsg] = useState(null)
   const [lastBackup, setLastBackup] = useState(null)
   const [lastAccountId, setLastAccountId] = useState(null)
+  // 商户→分类的学习结果。对账单导入和收据截图共用一份，
+  // 在一边教会的规则另一边立刻也认得。
+  const [importRules, setImportRules] = useState({})
 
   const reload = useCallback(async () => {
     const [rs, cs, as, bs, fs] = await Promise.all([
@@ -91,14 +96,16 @@ export default function App() {
     ;(async () => {
       await initCategories()
       await initAccounts()
-      const [cur, th, lastAcc, rates, tax] = await Promise.all([
+      const [cur, th, lastAcc, rates, tax, rules] = await Promise.all([
         getSetting('currency', 'MYR'),
         getSetting('theme', 'system'),
         getSetting('lastAccountId', null),
         getSetting('fx', null),
         getSetting('taxRates', null),
+        getSetting('import.rules', {}),
       ])
       if (tax) setTaxRates(tax)
+      setImportRules(rules ?? {})
       setCurrency(cur)
       setFx(rates ?? { [cur]: 1 })
       setTheme(th)
@@ -446,6 +453,7 @@ export default function App() {
             onOpenRecurring={() => setTab('recurring')}
             recurringCount={recurrings.filter((r) => r.active !== false).length}
             onOpenImport={() => setShowImport(true)}
+            onOpenReceipt={() => setShowReceipt(true)}
             onReload={async () => {
               setLastBackup(localStorage.getItem('lastBackup'))
               await reload()
@@ -475,6 +483,39 @@ export default function App() {
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {showReceipt && (
+        <ReceiptSheet
+          accounts={accounts}
+          categories={categories}
+          currency={currency}
+          defaultAccountId={lastAccountId}
+          // 同日期 + 同金额 + 同备注 = 很可能是同一张截图导了两次
+          existingFingerprints={
+            new Set(
+              records.map(
+                (t) =>
+                  `${t.date}|${Number(t.amount).toFixed(2)}|${String(t.note || '').trim().toLowerCase()}`
+              )
+            )
+          }
+          learnedRules={importRules}
+          onSave={async (record) => {
+            await handleSave(record)
+            setShowReceipt(false)
+            // 这次的商户→分类判断记下来，下次同一家店就自动选好
+            if (record.note && record.categoryId) {
+              const kw = record.note.trim().toLowerCase().split(/\s+/).slice(0, 2).join(' ')
+              if (kw.length >= 3) {
+                const next = { ...importRules, [kw]: record.categoryId }
+                setImportRules(next)
+                await setSetting('import.rules', next)
+              }
+            }
+          }}
+          onClose={() => setShowReceipt(false)}
         />
       )}
 

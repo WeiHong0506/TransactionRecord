@@ -44,7 +44,9 @@ export default defineConfig({
         // pdf.js 有 400KB+（worker 更是 2MB+），只有导入对账单时才用得上。
         // 预缓存它会让安装体积翻倍，所以改成首次用到时再下载并长期缓存——
         // 用过一次之后，离线也能继续导入。
-        globIgnores: ['**/pdf*.js', '**/pdf*.mjs'],
+        // OCR 模型有 9MB+，只有用「收据截图」才需要。预缓存它会让每个人
+        // 打开应用就先下 9MB，绝大多数人根本用不上——同 pdf.js 一个道理。
+        globIgnores: ['**/pdf*.js', '**/pdf*.mjs', 'ocr/**'],
         runtimeCaching: [
           {
             urlPattern: /\/assets\/pdf.*\.(?:js|mjs)$/,
@@ -52,6 +54,15 @@ export default defineConfig({
             options: {
               cacheName: 'pdfjs',
               expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 180 },
+            },
+          },
+          {
+            // 用过一次之后就长期留着，之后离线也能识别截图
+            urlPattern: /\/ocr\/.*\.(?:js|gz)$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'ocr-model',
+              expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 365 },
             },
           },
         ],

@@ -2107,9 +2107,21 @@ details.table-toggle[open] > summary::before {
   flex: none;
 }
 
-.rec-cur {
+/* 曾经的 bug：.input 带着 width:100% 进了 flex 行，三个子元素都想占满，
+   金额框被压成 28px 的一条缝——点不中，输进去的数字也看不见。
+   在 flex 行里宽度交给 flex 决定，min-width:0 允许它真的收缩。 */
+.rec-amount-row .input,
+.rec-day-row .input {
+  flex: 1 1 auto;
   width: auto;
-  flex: none;
+  min-width: 0;
+}
+
+/* 选择器要带上 select，否则压不过前面的 select.input { width: 100% }，
+   货币下拉会撑满一整行并溢出屏幕。 */
+select.rec-cur {
+  flex: 0 0 auto;
+  width: auto;
   padding: 11px 8px;
 }
 
@@ -2117,6 +2129,26 @@ details.table-toggle[open] > summary::before {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* 这一行不是 .list-item，拿不到那边的纵向排布，标题和说明会挤成一行 */
+.rec-toggle .li-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rec-toggle .li-title {
+  font-size: 14.5px;
+  line-height: 1.35;
+}
+
+.rec-toggle .li-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.35;
 }
 
 .rec-toggle input {
@@ -2257,4 +2289,90 @@ details.table-toggle[open] > summary::before {
   margin: 14px 0 0;
   font-size: 12.5px;
   color: var(--text-secondary);
+}
+
+/* ============ 收据截图导入 ============ */
+
+.rcp .section:first-child {
+  margin-top: 4px;
+}
+
+.rcp-lead {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin: 0 0 10px;
+}
+
+.rcp-back {
+  font-size: 13px;
+  color: var(--accent);
+  padding: 4px 0;
+  margin-bottom: 4px;
+}
+
+.rcp-text {
+  width: 100%;
+  resize: vertical;
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin-bottom: 10px;
+  font-family: inherit;
+}
+
+.rcp-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.rcp-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+/* 识别可信度。三档都用文字说清楚，颜色只是加强。 */
+.rcp-verdict {
+  font-size: 13px;
+  font-weight: 550;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+}
+
+.rcp-verdict[data-level='high'] {
+  background: color-mix(in srgb, var(--series-3) 14%, var(--surface));
+  color: var(--text-primary);
+}
+
+.rcp-verdict[data-level='medium'] {
+  background: color-mix(in srgb, var(--series-4) 16%, var(--surface));
+  color: var(--text-primary);
+}
+
+.rcp-verdict[data-level='low'] {
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  color: var(--text-primary);
+}
+
+.rcp-warn {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+/* 把「这个数字是从哪一行认出来的」摆出来——
+   不给依据的话，让人核对就只是让人重新猜一遍。 */
+.rcp-src {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  word-break: break-all;
 }

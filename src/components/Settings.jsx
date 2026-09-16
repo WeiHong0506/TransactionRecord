@@ -4,7 +4,7 @@ import { clearAllData, exportAll, importAll } from '../db.js'
 import SyncPanel from './SyncPanel.jsx'
 
 // 改动代码时手动 +1。线上「关于」里会显示，用来确认部署的到底是哪一版。
-const APP_VERSION = 'v1.10.0'
+const APP_VERSION = 'v1.11.0'
 
 // iOS 的独立窗口模式里 <a download> 经常被吞掉，优先走系统分享面板
 async function deliverFile(content, filename, mime) {
@@ -36,6 +36,7 @@ export default function Settings({
   onOpenRecurring,
   recurringCount = 0,
   onOpenImport,
+  onOpenReceipt,
   onReload,
   toast,
   records,
@@ -225,6 +226,13 @@ export default function Settings({
               <span className="li-sub">与现有数据合并，同一笔会覆盖</span>
             </span>
             <span className="li-right">↑</span>
+          </button>
+          <button className="list-item" onClick={onOpenReceipt} disabled={busy}>
+            <span className="li-main">
+              <span className="li-title">导入收据截图</span>
+              <span className="li-sub">TnG、银行转账收据，识别全程在本机</span>
+            </span>
+            <span className="li-right">›</span>
           </button>
           <button className="list-item" onClick={onOpenImport} disabled={busy}>
             <span className="li-main">

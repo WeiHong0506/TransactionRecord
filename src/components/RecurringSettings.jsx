@@ -209,22 +209,30 @@ function RecurringEditor({ initial, categories, accounts, currency, onSubmit, on
           <h2>{initial.id ? '编辑固定支出' : '新的固定支出'}</h2>
         </div>
         <div className="card card-pad rec-form">
-          <label className="field">
-            <span className="field-label">名称</span>
+          <div className="field">
+            <label className="field-label" htmlFor="rec-name">
+              名称
+            </label>
             <input
+              id="rec-name"
               className="input"
               type="text"
               value={name}
               placeholder="例如：房租"
               onChange={(e) => setName(e.target.value)}
             />
-          </label>
+          </div>
 
-          <label className="field">
-            <span className="field-label">每次金额</span>
-            <span className="rec-amount-row">
+          {/* 一个 label 只能管一个控件。金额框和货币下拉包在同一个 label 里的话，
+              点击会被转发给「第一个可聚焦控件」，在 iOS 上点金额可能弹出货币选择轮。 */}
+          <div className="field">
+            <label className="field-label" htmlFor="rec-amount">
+              每次金额
+            </label>
+            <div className="rec-amount-row">
               <span className="sym">{symbolOf(cur)}</span>
               <input
+                id="rec-amount"
                 className="input"
                 type="text"
                 inputMode="decimal"
@@ -232,15 +240,20 @@ function RecurringEditor({ initial, categories, accounts, currency, onSubmit, on
                 placeholder="0.00"
                 onChange={(e) => handleAmount(e.target.value)}
               />
-              <select className="input rec-cur" value={cur} onChange={(e) => setCur(e.target.value)}>
+              <select
+                className="input rec-cur"
+                aria-label="金额的货币"
+                value={cur}
+                onChange={(e) => setCur(e.target.value)}
+              >
                 {CURRENCIES.map((c) => (
                   <option key={c.code} value={c.code}>
                     {c.code}
                   </option>
                 ))}
               </select>
-            </span>
-          </label>
+            </div>
+          </div>
 
           <div className="field">
             <span className="field-label">分类</span>
@@ -280,12 +293,15 @@ function RecurringEditor({ initial, categories, accounts, currency, onSubmit, on
             </div>
           </div>
 
-          <label className="field">
-            <span className="field-label">扣款日</span>
-            <span className="rec-day-row">
+          <div className="field">
+            <label className="field-label" htmlFor="rec-day">
+              扣款日
+            </label>
+            <div className="rec-day-row">
               {cycle === 'yearly' && (
                 <select
                   className="input"
+                  aria-label="扣款月份"
                   value={yearMonth}
                   onChange={(e) => setYearMonth(e.target.value)}
                 >
@@ -296,20 +312,28 @@ function RecurringEditor({ initial, categories, accounts, currency, onSubmit, on
                   ))}
                 </select>
               )}
-              <select className="input" value={day} onChange={(e) => setDay(e.target.value)}>
+              <select
+                id="rec-day"
+                className="input"
+                value={day}
+                onChange={(e) => setDay(e.target.value)}
+              >
                 {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
                   <option key={d} value={d}>
                     {d} 号
                   </option>
                 ))}
               </select>
-            </span>
-          </label>
+            </div>
+          </div>
 
           {accounts.length > 1 && (
-            <label className="field">
-              <span className="field-label">默认扣款账户</span>
+            <div className="field">
+              <label className="field-label" htmlFor="rec-account">
+                默认扣款账户
+              </label>
               <select
+                id="rec-account"
                 className="input"
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
@@ -321,7 +345,7 @@ function RecurringEditor({ initial, categories, accounts, currency, onSubmit, on
                   </option>
                 ))}
               </select>
-            </label>
+            </div>
           )}
 
           <label className="field rec-toggle">
@@ -334,11 +358,11 @@ function RecurringEditor({ initial, categories, accounts, currency, onSubmit, on
 
           {next && (
             <p className="rec-preview">
-              下一次：<strong>{next}</strong>
+              下一次：<strong>{dueLabel(next)}</strong>
               {feb && feb.slice(-2) !== String(day).padStart(2, '0') && (
                 <>
                   <br />
-                  {`遇到短月自动往前靠，例如 2027 年 2 月是 ${feb}。`}
+                  {`遇到短月自动往前靠，例如 2027 年 2 月是 ${dueLabel(feb)}。`}
                 </>
               )}
             </p>

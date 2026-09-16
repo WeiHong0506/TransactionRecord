@@ -132,10 +132,14 @@ public/icons/                  PWA 图标（scripts/make-icons.py 生成）
 supabase-schema.sql            云端建表 + 行级安全策略（含 accounts 表，可重复执行）
 supabase-budgets.sql           v1.9.0 预算表迁移
 supabase-recurrings.sql        v1.10.0 固定支出表 + transactions.recurring_id
+public/ocr/                    收据识别模型（自己托管，不走第三方 CDN）
 src/
   import/
     pdfTable.js                PDF 表格还原：朝向判定、合并行、切列、处理折行
     tngStatement.js            TnG 对账单规则：日期金额解析、交易类型判定、商户归类
+    merchants.js               商户名→分类，对账单和收据截图共用一份
+    receipt.js                 收据文字解析：挑金额（避开余额和手续费）、认日期方向商户
+    ocr.js                     截图识别：灰度、深色模式反色、放大，模型自托管
   App.jsx                      主界面、底部导航、月份切换
   db.js                        IndexedDB 读写、软删除墓碑、备份导入导出
   supabase.js                  Supabase 客户端（未配置时整体降级为纯本地）
@@ -163,6 +167,7 @@ src/
     BudgetBar.jsx              预算进度条
     RecurringSettings.jsx      固定支出登记与编辑
     RecurringPanel.jsx         本月固定支出面板 + 可自由支配那一行
+    ReceiptSheet.jsx           收据截图导入：选来源 → 粘贴或选图 → 核对 → 保存
     CompareSection.jsx         和上月对比
 scripts/
   make-icons.py                重新生成各尺寸图标
@@ -174,6 +179,9 @@ scripts/
   recurring-test.mjs           固定支出与月度对比单元测试
   pad-test.mjs                 数字键盘运算与税费单元测试
   fx-test.mjs                  多货币折算单元测试
+  receipt-test.mjs             收据文字解析单元测试
+  make-sample-receipts.py      生成测试用收据截图（数据全是编的）
+  ocr-test.mjs                 收据 OCR 端到端测试（含深色模式、低分辨率）
 ```
 
 ### 配色说明
