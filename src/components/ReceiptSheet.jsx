@@ -13,7 +13,7 @@ import { formatAmount, symbolOf, todayStr } from '../utils.js'
  *
  * 两条输入路：
  *   粘贴文字 —— 用 iOS 自带的实况文本拷贝，准确率最高，不下载任何东西
- *   选图识别 —— 省事，但首次要下载约 4MB 模型，且识别有误差
+ *   选图识别 —— 省事，但首次要下载约 6MB 模型，且识别有误差
  */
 
 const STEP = { PICK: 'pick', INPUT: 'input', REVIEW: 'review' }
@@ -34,6 +34,7 @@ export default function ReceiptSheet({
   const [busy, setBusy] = useState(null) // { label, pct }
   const [error, setError] = useState(null)
   const [parsed, setParsed] = useState(null)
+  const [copied, setCopied] = useState(false)
 
   // 预览里可编辑的字段
   const [amount, setAmount] = useState('')
@@ -173,7 +174,7 @@ export default function ReceiptSheet({
               </div>
               <p className="rcp-lead">
                 省两步，但会有识别误差，所以结果一定要核对。
-                首次使用需要联网下载约 4MB 识别模型，之后离线也能用。
+                首次使用需要联网下载约 6MB 识别模型（托管在本站，不走第三方），之后离线也能用。
                 <strong>你的截图不会上传到任何地方</strong>——认字全在这台设备上完成。
               </p>
               <button
@@ -343,6 +344,29 @@ export default function ReceiptSheet({
                 </p>
               )}
             </div>
+
+            {/* 认得不对时，原文就是唯一能拿来排查的东西。
+                摊在这里 + 一键复制，免得还要退回上一步翻文本框。 */}
+            <details className="table-toggle" open={parsed.confidence !== 'high'}>
+              <summary>查看识别到的原文（认得不对时发给开发者）</summary>
+              <pre className="raw-text">{text || '(空)'}</pre>
+              <button
+                className="btn secondary slim"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(text)
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 1800)
+                  } catch {
+                    // 剪贴板被挡住时不装作成功——长按上面那段自己选也一样
+                    setCopied('fail')
+                    setTimeout(() => setCopied(false), 2400)
+                  }
+                }}
+              >
+                {copied === true ? '已复制' : copied === 'fail' ? '复制不了，长按上面选取' : '复制原文'}
+              </button>
+            </details>
 
             {isDup && (
               <p className="note-box warn">

@@ -40,6 +40,15 @@ const CASES = [
     want: { amount: '12.50', date: '2026-09-15', note: 'ZUS Coffee Mid Valley' },
   },
   {
+    // 真实版式：顶上超大号蓝字金额 + 左右两栏表格。
+    // 默认的 PSM 6 分段模式会把那行超大字整行丢掉，界面上就是「认不出金额」。
+    // 这一条钉住分段模式，别再改回 6。
+    label: '真实 TnG 版式：超大字金额 + 两栏表格',
+    file: `${DIR}/tng-real-layout.png`,
+    issuer: 'Touch',
+    want: { amount: '13.25', date: '2026-09-15', note: 'RESTORAN CONTOH (J) SDN BHD' },
+  },
+  {
     label: 'CIMB：同屏三个金额，要挑付款那个',
     file: `${DIR}/cimb.png`,
     issuer: 'CIMB',

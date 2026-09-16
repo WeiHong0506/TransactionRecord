@@ -11,6 +11,7 @@
 import {
   ISSUERS,
   detectIssuer,
+  repairMoney,
   parseReceipt,
   pickAmount,
   pickDate,
@@ -149,6 +150,109 @@ console.log('\n[2] 挑金额：余额和手续费是最像的陷阱')
     Amount RM 35.00
   `))
   ok('有并列候选时把另一个也带回来', rivals.rivals.includes(20) || rivals.rivals.includes(35))
+}
+
+console.log('\n[2b] OCR 会把金额弄坏的那几种方式')
+{
+  // 真实 TnG 收据的标题就是「Touch 'n Go eWallet」，大字金额常常紧挨在下一行。
+  // 曾经把光秃秃的 wallet 当成「余额」信号，结果整张收据最重要的那个数字
+  // 被直接排除，界面上就是「没认出金额」。这一条钉死它。
+  const header = pickAmount(L(`
+    Touch 'n Go eWallet
+    RM 12.50
+  `))
+  ok('标题里的 eWallet 不能把下一行的金额排除掉', header?.value === 12.5, JSON.stringify(header))
+
+  // 但真正的余额还是要排除
+  const bal = pickAmount(L(`
+    Wallet Balance
+    RM 238.75
+  `))
+  ok('「Wallet Balance」仍然算余额，排除', bal === null, JSON.stringify(bal))
+
+  // RM 50 是完全正常的收据金额，之前因为强制两位小数被整个漏掉
+  ok('整数令吉 RM 50', pickAmount(L('RM 50'))?.value === 50)
+  ok('带千分位的整数 RM 1,200', pickAmount(L('Amount\nRM 1,200'))?.value === 1200)
+
+  // OCR 把小数点读成逗号。千分位后面一定是三位，只跟两位的必然是小数点。
+  ok('RM 12,50 当成 12.50', pickAmount(L('RM 12,50'))?.value === 12.5)
+  ok('但 RM 1,200 仍是一千二', pickAmount(L('RM 1,200'))?.value === 1200)
+  // 小数点两边被读出空格
+  ok('RM 12. 50 当成 12.50', pickAmount(L('RM 12. 50'))?.value === 12.5)
+  // RM 后面的 O 几乎只可能是 0
+  ok('RM 1O.5O 当成 10.50', pickAmount(L('RM 1O.5O'))?.value === 10.5)
+  ok('修复只动数字，不动商户名', repairMoney('ZUS Coffee Mid Valley') === 'ZUS Coffee Mid Valley')
+
+  // 放开小数限制之后，最怕的是日期时间参考号混进来
+  const noise = pickAmount(L(`
+    Reference 20260915102311887
+    15/09/2026 10:23 AM
+    Successful
+  `))
+  ok('日期时间参考号都不算金额', noise === null, JSON.stringify(noise))
+  ok('裸数字没有 RM 也没有小数就不算', pickAmount(L('50')) === null)
+  // 参考号被切出前几位当金额是最隐蔽的错法
+  const cut = pickAmount(L('RM 12.50\n20260915102311887'))
+  ok('长数字串不能被切出一截当金额', cut?.value === 12.5, JSON.stringify(cut))
+}
+
+console.log('\n[2c] 真实 TnG 收据版式（OCR 原样输出，金额和参考号改过）')
+{
+  // 这段是从一张真实截图跑 OCR 拿到的原文，只把金额、日期、参考号换掉。
+  // 它和我一开始编的样本长得完全不一样，而正是这些差异让解析失败过：
+  //   · 金额在最顶上，带负号，RM 和数字之间没有空格
+  //   · 标签和值在同一行（左右两栏），不是竖排
+  //   · 有一行「Payment Method  eWallet Balance」——Balance 说的是付款方式
+  //   · Wallet Ref 的长数字被折成两行
+  //   · 底部导航栏和状态栏的乱码也会混进来
+  const REAL = `
+Details
+
+-RM13.25
+
+Transaction Type Payment
+Merchant RESTORAN CONTOH (J) SDN BHD
+
+Payment Details Payment - RESTORAN CONTOH (J) SDN
+
+BHD
+Payment Method eWallet Balance
+Date/Time 15/09/2026 19:53:35
+
+2026091510110000010000TNGOW3MY17174
+Wallet Ref
+
+8540264979
+Status Successful
+Transaction No. 4031087356
+
+Merchants can scan the code for refund or
+query transaction
+
+4031087356
+
+OQ V © = e°
+Home Transfer Activity Profile
+`
+  const r = parseReceipt(REAL, { issuerId: 'tng', today: TODAY })
+  ok('金额 13.25（RM 和数字之间没空格，还带负号）', r.amount === 13.25, String(r.amount))
+  ok('日期 2026-09-15', r.date === '2026-09-15', String(r.date))
+  ok('商户在同一行的右栏，也认得出', r.note === 'RESTORAN CONTOH (J) SDN BHD', r.note)
+  ok('餐厅归到餐饮', r.categoryId === 'exp-food', String(r.categoryId))
+  ok('方向是支出', r.direction === 'expense')
+  ok('可信度 high', r.confidence === 'high', r.confidence)
+  ok('没有任何警告', r.warnings.length === 0, r.warnings.join(' / '))
+  // 底部那串交易号和 Wallet Ref 都不能被当成金额
+  ok('交易号 4031087356 没被当成金额', r.amount !== 4031087356)
+  ok('参考号没混进备注', !r.note.includes('4031087356') && !r.note.includes('TNGOW'))
+
+  // 「Payment Method eWallet Balance」里的 Balance 指的是付款方式，
+  // 不能因此把紧跟的金额排除掉
+  const method = pickAmount(L(`
+    Payment Method eWallet Balance
+    RM 18.00
+  `))
+  ok('「Payment Method: eWallet Balance」不算余额行', method?.value === 18, JSON.stringify(method))
 }
 
 console.log('\n[3] 日期：大马是日/月/年')

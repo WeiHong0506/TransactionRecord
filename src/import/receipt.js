@@ -33,15 +33,25 @@ export const ISSUERS = [
 
 /* ---------------- 金额 ---------------- */
 
-// 必须带两位小数。这一条同时挡住了参考号——参考号是长整数，没有小数点。
-const MONEY = /(?:(RM|MYR)\s*)?(\d{1,3}(?:,\d{3})*\.\d{2}|\d{1,7}\.\d{2})(?:\s*(RM|MYR))?/gi
+// 小数部分可有可无：「RM 50」是完全正常的收据金额。
+// 但没有 RM 标记又没有小数的裸数字不算候选，否则日期、时间、参考号全会混进来。
+const MONEY = /(RM|MYR)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\d{1,7}(?:\.\d{2})?)\s*(RM|MYR)?/gi
 
 // 手续费、积分、汇率：永远不是你要记的那笔钱，有没有标签都排除
 const FEE_WORDS = /fee|charge|caj|yuran|rate|limit|points|mata|reward|cashback\s*earn/i
 
 // 余额是最凶的陷阱：它和付款金额长得一模一样，而且通常更大。
 // 除非这一行自己写着 Amount，否则一律排除。
-const BALANCE_WORDS = /balance|baki|available|wallet|saving|go\+/i
+//
+// 这里只认「balance / baki / available」这几个词，**不能**认光秃秃的 wallet：
+// TnG 收据的标题就是「Touch 'n Go eWallet」，而大字金额常常紧挨在它下一行。
+// 把 wallet 当成余额信号的话，整张收据最重要的那个数字会被直接排除掉，
+// 结果就是「认不出金额」。这个 bug 真实发生过，别再加回去。
+const BALANCE_WORDS = /balance|baki|available|saldo|akaun\s*semasa/i
+
+// 「Payment Method: eWallet Balance」里的 Balance 说的是付款方式，不是余额。
+// 真实 TnG 收据上就有这一行，不排除掉的话，紧跟其后的金额会被误伤。
+const NOT_REALLY_BALANCE = /payment\s*method|kaedah\s*bayaran|paid\s*(?:with|using|by)/i
 
 // 越靠前优先级越高
 const AMOUNT_LABELS = [
@@ -51,22 +61,60 @@ const AMOUNT_LABELS = [
 ]
 
 /**
+ * 修掉 OCR 常见的三种把金额弄坏的方式。只在找金额时用，
+ * 不碰商户名——那里乱改字符只会把名字搞花。
+ */
+export function repairMoney(line) {
+  return (
+    String(line)
+      // 「RM 12. 50」「12 .50」：小数点两边多出空格
+      .replace(/(\d)\s*([.,])\s*(\d)/g, '$1$2$3')
+      // 逗号后面只跟两位数字。千分位后面一定是三位，所以这是被读错的小数点。
+      .replace(/(\d),(\d{2})(?!\d)/g, '$1.$2')
+      // RM 紧跟的那串里，O 几乎只可能是 0，l/I 几乎只可能是 1
+      .replace(/\b(RM|MYR)\s*([0-9OolI][0-9OolI,. ]{0,11})/gi, (whole, cur, num) =>
+        `${cur} ${num.replace(/[Oo]/g, '0').replace(/[lI]/g, '1')}`
+      )
+  )
+}
+
+/**
  * 从所有候选里挑出付款金额。
  * 返回 { value, line, labeled } 或 null。
  */
-export function pickAmount(lines) {
+export function pickAmount(rawLines) {
   const cands = []
+  const lines = rawLines.map(repairMoney)
 
   lines.forEach((line, i) => {
     MONEY.lastIndex = 0
     let m
     while ((m = MONEY.exec(line)) !== null) {
+      const token = m[2]
+      if (!token) continue
+      // 零宽匹配会让 exec 原地打转
+      if (m[0].trim() === '') {
+        MONEY.lastIndex++
+        continue
+      }
+
       const marked = Boolean(m[1] || m[3])
-      const value = Number(m[2].replace(/,/g, ''))
+      const hasCents = token.includes('.')
+      const value = Number(token.replace(/,/g, ''))
       if (!Number.isFinite(value) || value <= 0) continue
 
-      // 没有 RM 标记、又有 7 位以上整数位的，多半是被误读的参考号
-      const intDigits = m[2].split('.')[0].replace(/,/g, '').length
+      // 数字必须是完整的一段，不能是更长数字串里截出来的一截。
+      // 少了这一条，参考号 20260915102311887 会被切出前 7 位当成金额。
+      const before = line[m.index + m[0].indexOf(token) - 1] ?? ' '
+      const after = line[m.index + m[0].indexOf(token) + token.length] ?? ' '
+      if (/[\d.,:/-]/.test(before) || /[\d:/-]/.test(after)) continue
+
+      // 没有 RM 标记、又没有小数的裸数字一律不算：
+      // 日期、时间、张数、参考号全长这样，放进来只会添乱。
+      if (!marked && !hasCents) continue
+
+      // 没有 RM 标记、整数位又有 7 位以上的，多半是被误读的参考号
+      const intDigits = token.split('.')[0].replace(/,/g, '').length
       if (!marked && intDigits >= 7) continue
 
       // 标签可能和数字同一行，也可能在上一行——收据几乎都是竖排的：
@@ -79,7 +127,12 @@ export function pickAmount(lines) {
 
       if (FEE_WORDS.test(context)) return
       // 明写着 Amount 的话，旁边那个 Balance 字样管不着它
-      if (BALANCE_WORDS.test(context) && rank === AMOUNT_LABELS.length) return
+      if (
+        BALANCE_WORDS.test(context) &&
+        !NOT_REALLY_BALANCE.test(context) &&
+        rank === AMOUNT_LABELS.length
+      )
+        return
 
       cands.push({ value, line: line.trim(), marked, rank, i })
     }

@@ -56,6 +56,38 @@ CIMB = [
     ("Available Balance", 22, False), ("RM 8,431.09", 30, True),
 ]
 
+# 真实 TnG 收据的版式：顶上一条蓝色标题栏，超大号蓝字金额，
+# 下面是左右两栏的表格。和上面那种竖排样式完全不同——
+# 默认的 PSM 6 分段模式会把那行超大字整行丢掉，这张图就是用来钉住这件事的。
+def render_real_tng():
+    W, H = 1320, 2400
+    img = Image.new("RGB", (W, H), "white")
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 0, W, 300], fill=(0, 82, 204))
+    d.text((W // 2 - 70, 200), "Details", font=font(46, True), fill=(255, 255, 255))
+    # 金额：超大号、蓝色、带负号、RM 和数字之间没有空格
+    d.text((48, 360), "-RM13.25", font=font(110, False), fill=(20, 110, 240))
+
+    rows = [
+        ("Transaction Type", "Payment"),
+        ("Merchant", "RESTORAN CONTOH (J) SDN BHD"),
+        ("Payment Method", "eWallet Balance"),
+        ("Date/Time", "15/09/2026 19:53:35"),
+        ("Status", "Successful"),
+        ("Transaction No.", "4031087356"),
+    ]
+    y = 620
+    for k, v in rows:
+        d.line([48, y - 30, W - 48, y - 30], fill=(225, 225, 225), width=2)
+        d.text((48, y), k, font=font(38), fill=(110, 110, 110))
+        vw = d.textlength(v, font=font(38))
+        d.text((W - 48 - vw, y), v, font=font(38), fill=(20, 20, 20))
+        y += 130
+    return img
+
+
+render_real_tng().save(OUT / "tng-real-layout.png")
+
 tng = render(TNG, height=1200)
 tng.save(OUT / "tng-light.png")
 # 深色模式：浅字深底。Tesseract 对这种图几乎认不出来，所以要先反色。

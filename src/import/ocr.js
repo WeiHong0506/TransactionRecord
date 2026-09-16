@@ -125,6 +125,14 @@ export async function recognizeImage(file, { onProgress } = {}) {
     )
   }
 
+  // PSM 4 = 单列、字号不一。这正是收据截图的样子。
+  //
+  // 默认的 PSM 6 假设整页是一块均匀正文，会把顶上那行超大字的金额
+  // 当成噪声整行丢掉——真实 TnG 收据上「-RM13.25」就是这么消失的，
+  // 表现为「认不出金额」。PSM 11/12 虽然也能认出金额，但会把
+  // 「Merchant  XXX」这种左右两栏拆成两行，商户名反而认不出来。
+  await worker.setParameters({ tessedit_pageseg_mode: '4' })
+
   const { data } = await worker.recognize(canvas)
   // 用完就把画布尺寸清零，让这张图尽快离开内存
   canvas.width = 0
